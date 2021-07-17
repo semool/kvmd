@@ -44,6 +44,22 @@ export function Gpio() {
 					__setLedState(el, state.inputs[channel].state);
 				}
 			}
+			/* Patch for 2 Daisychained ezcoo Switches */
+			/* Disable Status LED in Webif for all ezcoo2 Ports when a Port on ezcoo1 is selected */
+			for (let channel of ["ch1_led", "ch2_led", "ch3_led"]) {
+				if (state.inputs[channel].state) {
+					/*alert("Active Channel: " + channel);*/
+					for (let channel of ["ch5_led", "ch6_led", "ch7_led", "ch8_led"]) {
+						if (state.inputs[channel].state) {
+							let el = $(`gpio-led-${channel}`);
+							if (el) {
+								/*alert("Disabled Channel: " + channel);*/
+								__setLedState(el, false);
+							}
+						}
+					}
+				}
+			}
 			for (let channel in state.outputs) {
 				for (let type of ["switch", "button"]) {
 					let el = $(`gpio-${type}-${channel}`);
@@ -85,7 +101,7 @@ export function Gpio() {
 					if (item.type === "output") {
 						item.scheme = model.scheme.outputs[item.channel];
 					}
-					content += `<td align="center">${__createItem(item)}</td>`;
+					content += `<td align="left"><b>${__createItem(item)}</b></td>`;
 				}
 				content += "</tr>";
 			}

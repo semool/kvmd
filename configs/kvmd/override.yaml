@@ -37,3 +37,157 @@
 #    auth:
 #        vncauth:
 #            enabled: true # Enable auth via /etc/kvmd/vncpasswd
+
+kvmd:
+    gpio:
+        drivers:
+            ch1_wol:
+                type: wol
+                mac: 00:00:00:00:00:00
+            ch2_wol:
+                type: wol
+                mac: 00:00:00:00:00:00
+            ch3_wol:
+                type: wol
+                mac: 00:00:00:00:00:00
+            ch5_wol:
+                type: wol
+                mac: 00:00:00:00:00:00
+            ch6_wol:
+                type: wol
+                mac: 00:00:00:00:00:00
+            ch7_wol:
+                type: wol
+                mac: 00:00:00:00:00:00
+            ch8_wol:
+                type: wol
+                mac: 00:00:00:00:00:00
+            ez1:
+                type: ezcoo
+                protocol: 2
+                device: /dev/ezcoo1
+            ez2:
+                type: ezcoo
+                protocol: 2
+                device: /dev/ezcoo2
+        scheme:
+            ch1_wol_button:
+                driver: ch1_wol
+                pin: 0
+                mode: output
+                switch: false
+            ch2_wol_button:
+                driver: ch2_wol
+                pin: 0
+                mode: output
+                switch: false
+            ch3_wol_button:
+                driver: ch3_wol
+                pin: 0
+                mode: output
+                switch: false
+            ch5_wol_button:
+                driver: ch5_wol
+                pin: 0
+                mode: output
+                switch: false
+            ch6_wol_button:
+                driver: ch6_wol
+                pin: 0
+                mode: output
+                switch: false
+            ch7_wol_button:
+                driver: ch7_wol
+                pin: 0
+                mode: output
+                switch: false
+            ch8_wol_button:
+                driver: ch8_wol
+                pin: 0
+                mode: output
+                switch: false
+            ch1_led:
+                driver: ez1
+                pin: 0
+                mode: input
+            ch2_led:
+                driver: ez1
+                pin: 1
+                mode: input
+            ch3_led:
+                driver: ez1
+                pin: 2
+                mode: input
+            ch4_led:
+                driver: ez1
+                pin: 3
+                mode: input
+            ch5_led:
+                driver: ez2
+                pin: 0
+                mode: input
+            ch6_led:
+                driver: ez2
+                pin: 1
+                mode: input
+            ch7_led:
+                driver: ez2
+                pin: 2
+                mode: input
+            ch8_led:
+                driver: ez2
+                pin: 3
+                mode: input
+            ch1_button:
+                driver: ez1
+                pin: 0
+                mode: output
+                switch: false
+            ch2_button:
+                driver: ez1
+                pin: 1
+                mode: output
+                switch: false
+            ch3_button:
+                driver: ez1
+                pin: 2
+                mode: output
+                switch: false
+            ch4_button:
+                driver: ez1
+                pin: 3
+                mode: output
+                switch: false
+            ch5_button:
+                driver: ez2
+                pin: 0
+                mode: output
+                switch: false
+            ch6_button:
+                driver: ez2
+                pin: 1
+                mode: output
+                switch: false
+            ch7_button:
+                driver: ez2
+                pin: 2
+                mode: output
+                switch: false
+            ch8_button:
+                driver: ez2
+                pin: 3
+                mode: output
+                switch: false
+        view:
+            table:
+                - ["#[ 4 ] Passthrough Port 5-8", ch4_led|yellow]
+                - []
+                - ["#[ 1 ] Proxmox", ch1_led, ch1_button|Switch, ch1_wol_button|WoL]
+                - ["#[ 2 ] Proxmox1", ch2_led, ch2_button|Switch, ch2_wol_button|WoL]
+                - ["#[ 3 ] Proxmox2", ch3_led, ch3_button|Switch, ch3_wol_button|WoL]
+                - ["#[ 5 ] Proxmox3", ch5_led, ch5_button|Switch, ch5_wol_button|WoL]
+                - ["#[ 6 ] Proxmox4", ch6_led, ch6_button|Switch, ch6_wol_button|WoL]
+                - ["#[ 7 ] Proxmox5", ch7_led, ch7_button|Switch, ch7_wol_button|WoL]
+                - ["#[ 8 ] empty", ch8_led, ch8_button|Switch, ch8_wol_button|WoL]
+            header:
+                title: KVM & WoL
