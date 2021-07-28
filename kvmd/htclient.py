@@ -20,7 +20,15 @@
 # ========================================================================== #
 
 
+import os
+import contextlib
+
+from typing import Dict
+from typing import AsyncGenerator
+from typing import Optional
+
 import aiohttp
+import aiohttp.multipart
 
 from . import __version__
 
@@ -41,3 +49,38 @@ def raise_not_200(response: aiohttp.ClientResponse) -> None:
             message=response.reason,
             headers=response.headers,
         )
+
+
+def get_filename(response: aiohttp.ClientResponse) -> str:
+    try:
+        disp = response.headers["Content-Disposition"]
+        parsed = aiohttp.multipart.parse_content_disposition(disp)
+        return str(parsed[1]["filename"])
+    except Exception:
+        try:
+            return os.path.basename(response.url.path)
+        except Exception:
+            raise aiohttp.ClientError("Can't determine filename")
+
+
+@contextlib.asynccontextmanager
+async def download(
+    url: str,
+    verify: bool=True,
+    timeout: float=10.0,
+    read_timeout: Optional[float]=None,
+    app: str="KVMD",
+) -> AsyncGenerator[aiohttp.ClientResponse, None]:
+
+    kwargs: Dict = {
+        "headers": {"User-Agent": make_user_agent(app)},
+        "timeout": aiohttp.ClientTimeout(
+            connect=timeout,
+            sock_connect=timeout,
+            sock_read=(read_timeout if read_timeout is not None else timeout),
+        ),
+    }
+    async with aiohttp.ClientSession(**kwargs) as session:
+        async with session.get(url, verify_ssl=verify) as response:
+            raise_not_200(response)
+            yield response
