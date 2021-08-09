@@ -5,5 +5,8 @@
 This repository contains the configuration and code of KVMD, the main PI-KVM daemon.
 If your request does not relate directly to this codebase, please send it to issues of the [Pi-KVM](https://github.com/pikvm/pikvm/issues) repository.
 
-# 2x Ezcoo KVM 4x Switch Patch
+# 2x Ezcoo KVM 4x Switch Patch (7 usable Ports)
 https://github.com/semool/kvmd/commit/1f9448cbc07cefbe0d32b7178596178e8cac0b03
+
+# 3x Ezcoo KVM 4x Switch Patch (10 usable Ports)
+https://github.com/semool/kvmd/commit/d950c1c771ad30d5f2adea62a1d7eb6082f1da69
