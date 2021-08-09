@@ -38,7 +38,31 @@
 #        vncauth:
 #            enabled: true # Enable auth via /etc/kvmd/vncpasswd
 
+vnc:
+    keymap: /usr/share/kvmd/keymaps/de
+
 kvmd:
+    atx:
+        type: disabled
+
+#    msd:
+#        type: disabled
+
+    hid:
+       type: serial
+       reset_pin: 4
+       device: /dev/kvmd-hid
+
+#      mouse_alt:
+#         device: /boot/kvmd-hid-mouse-alt
+
+    streamer:
+       quality: 75
+       h264_bitrate:
+            default: 8000
+       desired_fps:
+            default: 50
+
     gpio:
         drivers:
             ch1_wol:
@@ -59,7 +83,16 @@ kvmd:
             ch7_wol:
                 type: wol
                 mac: 00:00:00:00:00:00
-            ch8_wol:
+            ch9_wol:
+                type: wol
+                mac: 00:00:00:00:00:00
+            ch10_wol:
+                type: wol
+                mac: 00:00:00:00:00:00
+            ch11_wol:
+                type: wol
+                mac: 00:00:00:00:00:00
+            ch12_wol:
                 type: wol
                 mac: 00:00:00:00:00:00
             ez1:
@@ -70,6 +103,10 @@ kvmd:
                 type: ezcoo
                 protocol: 2
                 device: /dev/ezcoo2
+            ez3:
+                type: ezcoo
+                protocol: 2
+                device: /dev/ezcoo3
         scheme:
             ch1_wol_button:
                 driver: ch1_wol
@@ -101,8 +138,23 @@ kvmd:
                 pin: 0
                 mode: output
                 switch: false
-            ch8_wol_button:
-                driver: ch8_wol
+            ch9_wol_button:
+                driver: ch9_wol
+                pin: 0
+                mode: output
+                switch: false
+            ch10_wol_button:
+                driver: ch10_wol
+                pin: 0
+                mode: output
+                switch: false
+            ch11_wol_button:
+                driver: ch11_wol
+                pin: 0
+                mode: output
+                switch: false
+            ch12_wol_button:
+                driver: ch12_wol
                 pin: 0
                 mode: output
                 switch: false
@@ -136,6 +188,22 @@ kvmd:
                 mode: input
             ch8_led:
                 driver: ez2
+                pin: 3
+                mode: input
+            ch9_led:
+                driver: ez3
+                pin: 0
+                mode: input
+            ch10_led:
+                driver: ez3
+                pin: 1
+                mode: input
+            ch11_led:
+                driver: ez3
+                pin: 2
+                mode: input
+            ch12_led:
+                driver: ez3
                 pin: 3
                 mode: input
             ch1_button:
@@ -178,16 +246,40 @@ kvmd:
                 pin: 3
                 mode: output
                 switch: false
+            ch9_button:
+                driver: ez3
+                pin: 0
+                mode: output
+                switch: false
+            ch10_button:
+                driver: ez3
+                pin: 1
+                mode: output
+                switch: false
+            ch11_button:
+                driver: ez3
+                pin: 2
+                mode: output
+                switch: false
+            ch12_button:
+                driver: ez3
+                pin: 3
+                mode: output
+                switch: false
         view:
             table:
-                - ["#[ 4 ] Passthrough Port 5-8", ch4_led|yellow]
+                - ["#[  4 ] Passthrough Port 5-8", ch4_led|yellow]
+                - ["#[  8 ] Passthrough Port 9-12", ch8_led|yellow]
                 - []
-                - ["#[ 1 ] Proxmox", ch1_led, ch1_button|Switch, ch1_wol_button|WoL]
-                - ["#[ 2 ] Proxmox1", ch2_led, ch2_button|Switch, ch2_wol_button|WoL]
-                - ["#[ 3 ] Proxmox2", ch3_led, ch3_button|Switch, ch3_wol_button|WoL]
-                - ["#[ 5 ] Proxmox3", ch5_led, ch5_button|Switch, ch5_wol_button|WoL]
-                - ["#[ 6 ] Proxmox4", ch6_led, ch6_button|Switch, ch6_wol_button|WoL]
-                - ["#[ 7 ] Proxmox5", ch7_led, ch7_button|Switch, ch7_wol_button|WoL]
-                - ["#[ 8 ] empty", ch8_led, ch8_button|Switch, ch8_wol_button|WoL]
+                - ["#[  1 ] Port1", ch1_led, ch1_button|Switch, ch1_wol_button|WoL]
+                - ["#[  2 ] Port2", ch2_led, ch2_button|Switch, ch2_wol_button|WoL]
+                - ["#[  3 ] Port3", ch3_led, ch3_button|Switch, ch3_wol_button|WoL]
+                - ["#[  5 ] Port5", ch5_led, ch5_button|Switch, ch5_wol_button|WoL]
+                - ["#[  6 ] Port6", ch6_led, ch6_button|Switch]
+                - ["#[  7 ] Port7", ch7_led, ch7_button|Switch, ch7_wol_button|WoL]
+                - ["#[  9 ] Port9", ch9_led, ch9_button|Switch]
+                - ["#[ 10 ] Port10", ch10_led, ch10_button|Switch]
+                - ["#[ 11 ] Port11", ch11_led, ch11_button|Switch]
+                - ["#[ 12 ] Port12", ch12_led, ch12_button|Switch]
             header:
                 title: KVM & WoL
