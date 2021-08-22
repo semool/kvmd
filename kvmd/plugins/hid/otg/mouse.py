@@ -54,6 +54,16 @@ class MouseProcess(BaseDeviceProcess):
         self.__pressed_buttons = 0
         self.__x = 0  # For absolute
         self.__y = 0
+        self.__win98_fix = False
+
+    def is_absolute(self) -> bool:
+        return self.__absolute
+
+    def set_win98_fix(self, enabled: bool) -> None:
+        self.__win98_fix = enabled
+
+    def get_win98_fix(self) -> bool:
+        return self.__win98_fix
 
     def cleanup(self) -> None:
         self._stop()
@@ -81,7 +91,7 @@ class MouseProcess(BaseDeviceProcess):
 
     def send_move_event(self, to_x: int, to_y: int) -> None:
         if self.__absolute:
-            self._queue_event(MouseMoveEvent(to_x, to_y))
+            self._queue_event(MouseMoveEvent(to_x, to_y, self.__win98_fix))
 
     def send_relative_event(self, delta_x: int, delta_y: int) -> None:
         if not self.__absolute:

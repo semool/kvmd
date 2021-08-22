@@ -274,12 +274,17 @@ export var tools = new function() {
 		return {
 			"get": function(key, default_value) {
 				let value = window.localStorage.getItem(key);
-				return (value !== null ? value : default_value);
+				return (value !== null ? value : `${default_value}`);
 			},
 			"set": (key, value) => window.localStorage.setItem(key, value),
 
 			"getBool": (key, default_value) => !!parseInt(self.storage.get(key, (default_value ? "1" : "0"))),
 			"setBool": (key, value) => self.storage.set(key, (value ? "1" : "0")),
+
+			"bindSimpleSwitch": function(el, key, default_value) {
+				el.checked = self.storage.getBool(key, default_value);
+				self.el.setOnClick(el, () => self.storage.setBool(key, el.checked), false);
+			},
 		};
 	};
 

@@ -74,10 +74,7 @@ export function Hid(__getResolution) {
 		window.addEventListener("pagehide", __releaseAll);
 		window.addEventListener("blur", __releaseAll);
 
-		$("hid-pak-ask-switch").checked = tools.storage.getBool("hid.pak.ask", true);
-		tools.el.setOnClick($("hid-pak-ask-switch"), function() {
-			tools.storage.setBool("hid.pak.ask", $("hid-pak-ask-switch").checked);
-		}, false);
+		tools.storage.bindSimpleSwitch($("hid-pak-ask-switch"), "hid.pak.ask", true);
 
 		$("hid-pak-keymap-selector").addEventListener("change", function() {
 			tools.storage.set("hid.pak.keymap", $("hid-pak-keymap-selector").value);
@@ -136,6 +133,7 @@ export function Hid(__getResolution) {
 					let html = "";
 					for (let args of [
 						["USB", "usb", false],
+						["USB Win98", "usb_win98", false],
 						["USB Relative", "usb_rel", true],
 						["PS/2", "ps2", true],
 						["Off", "disabled"],
@@ -159,6 +157,7 @@ export function Hid(__getResolution) {
 			tools.feature.setEnabled($("hid-outputs-keyboard"), keyboard_outputs.length);
 			tools.feature.setEnabled($("hid-outputs-mouse"), mouse_outputs.length);
 			tools.feature.setEnabled($("hid-mouse-squash"), has_relative);
+			tools.feature.setEnabled($("hid-mouse-sens"), has_relative);
 			tools.feature.setEnabled($("hid-connect"), (state.connected !== null));
 			$("hid-connect-switch").checked = !!state.connected;
 		}
@@ -166,6 +165,7 @@ export function Hid(__getResolution) {
 		tools.radio.setEnabled("hid-outputs-keyboard-radio", (state && state.online && !state.busy));
 		tools.radio.setEnabled("hid-outputs-mouse-radio", (state && state.online && !state.busy));
 		tools.el.setEnabled($("hid-mouse-squash-switch"), (has_relative_squash && !state.busy));
+		tools.el.setEnabled($("hid-mouse-sens-slider"), (has_relative_squash && !state.busy));
 		tools.el.setEnabled($("hid-connect-switch"), (state && state.online && !state.busy));
 
 		if (state) {

@@ -149,8 +149,13 @@ class UsbMouseAbsolute {
 	public:
 		UsbMouseAbsolute() {}
 
-		void begin() {
+		void begin(bool win98_fix) {
 			_mouse.begin();
+			_mouse.setWin98FixEnabled(win98_fix);
+		}
+
+		bool isWin98FixEnabled() {
+			return _mouse.isWin98FixEnabled();
 		}
 
 		void clear() {

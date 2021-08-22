@@ -129,10 +129,12 @@ def _create_ethernet(gadget_path: str, config_path: str, driver: str, host_mac: 
     _symlink(func_path, join(config_path, f"{driver}.usb0"))
 
 
-def _create_hid(gadget_path: str, config_path: str, instance: int, hid: Hid) -> None:
+def _create_hid(gadget_path: str, config_path: str, instance: int, remote_wakeup: bool, hid: Hid) -> None:
     func_path = join(gadget_path, f"functions/hid.usb{instance}")
     _mkdir(func_path)
     _write(join(func_path, "no_out_endpoint"), "1", optional=True)
+    if remote_wakeup:
+        _write(join(func_path, "wakeup_on_write"), "1", optional=True)
     _write(join(func_path, "protocol"), str(hid.protocol))
     _write(join(func_path, "subclass"), str(hid.subclass))
     _write(join(func_path, "report_length"), str(hid.report_length))
@@ -166,7 +168,7 @@ def _create_msd(
     _symlink(func_path, join(config_path, f"mass_storage.usb{instance}"))
 
 
-def _cmd_start(config: Section) -> None:
+def _cmd_start(config: Section) -> None:  # pylint: disable=too-many-statements
     # https://www.kernel.org/doc/Documentation/usb/gadget_configfs.txt
     # https://www.isticktoit.net/?p=1383
 
@@ -196,37 +198,39 @@ def _cmd_start(config: Section) -> None:
     _mkdir(join(config_path, "strings/0x409"))
     _write(join(config_path, "strings/0x409/configuration"), f"Config 1: {config.otg.config}")
     _write(join(config_path, "MaxPower"), "250")
-    # TODO: Add this and MaxPower=100 to enable Remote Wakeup on Bus Powered
-    # _write(join(config_path, "bmAttributes"), "0xA0")
+    if config.otg.remote_wakeup:
+        # XXX: Should we use MaxPower=100 with Remote Wakeup?
+        _write(join(config_path, "bmAttributes"), "0xA0")
 
     if config.otg.devices.serial.enabled:
-        logger.info("===== Required Serial =====")
+        logger.info("===== Serial =====")
         _create_serial(gadget_path, config_path)
 
     if config.otg.devices.ethernet.enabled:
-        logger.info("===== Required Ethernet =====")
+        logger.info("===== Ethernet =====")
         _create_ethernet(gadget_path, config_path, **config.otg.devices.ethernet._unpack(ignore=["enabled"]))
 
     if config.kvmd.hid.type == "otg":
-        logger.info("===== Required HID =====")
-        _create_hid(gadget_path, config_path, 0, make_keyboard_hid())
-        _create_hid(gadget_path, config_path, 1, make_mouse_hid(
+        logger.info("===== HID-Keyboard =====")
+        _create_hid(gadget_path, config_path, 0, config.otg.remote_wakeup, make_keyboard_hid())
+        logger.info("===== HID-Mouse =====")
+        _create_hid(gadget_path, config_path, 1, config.otg.remote_wakeup, make_mouse_hid(
             absolute=config.kvmd.hid.mouse.absolute,
             horizontal_wheel=config.kvmd.hid.mouse.horizontal_wheel,
         ))
         if config.kvmd.hid.mouse_alt.device:
-            logger.info("===== Required HID-Mouse ALT =====")
-            _create_hid(gadget_path, config_path, 2, make_mouse_hid(
+            logger.info("===== HID-Mouse-Alt =====")
+            _create_hid(gadget_path, config_path, 2, config.otg.remote_wakeup, make_mouse_hid(
                 absolute=(not config.kvmd.hid.mouse.absolute),
                 horizontal_wheel=config.kvmd.hid.mouse_alt.horizontal_wheel,
             ))
 
     if config.kvmd.msd.type == "otg":
-        logger.info("===== Required MSD =====")
+        logger.info("===== MSD =====")
         _create_msd(gadget_path, config_path, 0, config.otg.user, **config.otg.devices.msd.default._unpack())
         if config.otg.devices.drives.enabled:
-            logger.info("===== Required MSD extra drives: %d =====", config.otg.devices.drives.count)
             for instance in range(config.otg.devices.drives.count):
+                logger.info("===== MSD Extra: %d =====", config.otg.devices.drives.count)
                 _create_msd(gadget_path, config_path, instance + 1, "root", **config.otg.devices.drives.default._unpack())
 
     logger.info("===== Preparing complete =====")
