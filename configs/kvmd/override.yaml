@@ -65,6 +65,56 @@ kvmd:
 
     gpio:
         drivers:
+            ch1_plug:
+               type: hue
+               ip: HueBridgeIP
+               username: HueApiUsername
+               device: 27
+            ch2_plug:
+               type: hue
+               ip: HueBridgeIP
+               username: HueApiUsername
+               device: 28
+            ch3_plug:
+               type: hue
+               ip: HueBridgeIP
+               username: HueApiUsername
+               device: 29
+            ch5_plug:
+               type: hue
+               ip: HueBridgeIP
+               username: HueApiUsername
+               device: 30
+            ch6_plug:
+               type: hue
+               ip: HueBridgeIP
+               username: HueApiUsername
+               device: 31
+            ch7_plug:
+               type: hue
+               ip: HueBridgeIP
+               username: HueApiUsername
+               device: 32
+            ch9_plug:
+               type: hue
+               ip: HueBridgeIP
+               username: HueApiUsername
+               device: 0
+            ch10_plug:
+               type: hue
+               ip: HueBridgeIP
+               username: HueApiUsername
+               device: 0
+            ch11_plug:
+               type: hue
+               ip: HueBridgeIP
+               username: HueApiUsername
+               device: 0
+            ch12_plug:
+               type: hue
+               ip: HueBridgeIP
+               username: HueApiUsername
+               device: 0
             ch1_wol:
                 type: wol
                 mac: 00:00:00:00:00:00
@@ -108,6 +158,56 @@ kvmd:
                 protocol: 2
                 device: /dev/ezcoo3
         scheme:
+            ch1_plug_button:
+                driver: ch1_plug
+                pin: 0
+                mode: output
+                switch: false
+            ch2_plug_button:
+                driver: ch2_plug
+                pin: 0
+                mode: output
+                switch: false
+            ch3_plug_button:
+                driver: ch3_plug
+                pin: 0
+                mode: output
+                switch: false
+            ch5_plug_button:
+                driver: ch5_plug
+                pin: 0
+                mode: output
+                switch: false
+            ch6_plug_button:
+                driver: ch6_plug
+                pin: 0
+                mode: output
+                switch: false
+            ch7_plug_button:
+                driver: ch7_plug
+                pin: 0
+                mode: output
+                switch: false
+            ch9_plug_button:
+                driver: ch9_plug
+                pin: 0
+                mode: output
+                switch: false
+            ch10_plug_button:
+                driver: ch10_plug
+                pin: 0
+                mode: output
+                switch: false
+            ch11_plug_button:
+                driver: ch11_plug
+                pin: 0
+                mode: output
+                switch: false
+            ch12_plug_button:
+                driver: ch12_plug
+                pin: 0
+                mode: output
+                switch: false
             ch1_wol_button:
                 driver: ch1_wol
                 pin: 0
@@ -281,5 +381,10 @@ kvmd:
                 - ["#[ 10 ] Port10", ch10_led, ch10_button|Switch]
                 - ["#[ 11 ] Port11", ch11_led, ch11_button|Switch]
                 - ["#[ 12 ] Port12", ch12_led, ch12_button|Switch]
+            - []
+                - ["#Power Control SmartPlug (On/Off):"]
+                - []
+                - [ch1_plug_button|ch1 , ch2_plug_button|ch2, ch3_plug_button|ch3]
+                - [ch5_plug_button|ch5, ch6_plug_button|ch6, ch7_plug_button|ch7]
             header:
-                title: KVM & WoL
+                title: Source Control
