@@ -406,25 +406,20 @@ kvmd:
                 pin: 3
                 mode: output
                 switch: false
-        view:
+         view:
             table:
                 - ["#[  4 ] Passthrough Port 5-8", ch4_led|yellow]
                 - ["#[  8 ] Passthrough Port 9-12", ch8_led|yellow]
                 - []
-                - ["#[  1 ] Port1", ch1_led, ch1_button|Switch, ch1_wol_button|WoL]
-                - ["#[  2 ] Port2", ch2_led, ch2_button|Switch, ch2_wol_button|WoL]
-                - ["#[  3 ] Port3", ch3_led, ch3_button|Switch, ch3_wol_button|WoL]
-                - ["#[  5 ] Port5", ch5_led, ch5_button|Switch, ch5_wol_button|WoL]
-                - ["#[  6 ] Port6", ch6_led, ch6_button|Switch]
-                - ["#[  7 ] Port7", ch7_led, ch7_button|Switch, ch7_wol_button|WoL]
+                - ["#[  1 ] Port1", ch1_led, ch1_button|Switch, ch1_wol_button|WoL, "#Power:", ch1_plug_led, ch1_plug_button|Toggle]
+                - ["#[  2 ] Port2", ch2_led, ch2_button|Switch, ch2_wol_button|WoL, "#Power:", ch2_plug_led, ch2_plug_button|Toggle]
+                - ["#[  3 ] Port3", ch3_led, ch3_button|Switch, ch3_wol_button|WoL, "#Power:", ch3_plug_led, ch3_plug_button|Toggle]
+                - ["#[  5 ] Port5", ch5_led, ch5_button|Switch, ch5_wol_button|WoL, "#Power:", ch5_plug_led, ch5_plug_button|Toggle]
+                - ["#[  6 ] Port6", ch6_led, ch6_button|Switch, "#", "#Power:", ch6_plug_led, ch6_plug_button|Toggle]
+                - ["#[  7 ] Port7", ch7_led, ch7_button|Switch, ch7_wol_button|WoL, "#Power:", ch7_plug_led, ch7_plug_button|Toggle]
                 - ["#[  9 ] Port9", ch9_led, ch9_button|Switch]
-                - ["#[ 10 ] Port10", ch10_led, ch10_button|Switch]
-                - ["#[ 11 ] Port11", ch11_led, ch11_button|Switch]
-                - ["#[ 12 ] Port12", ch12_led, ch12_button|Switch]
-            - []
-                - ["#Power Control SmartPlug (On/Off):"]
-                - []
-                - [ch1_plug_button|ch1 , ch2_plug_button|ch2, ch3_plug_button|ch3]
-                - [ch5_plug_button|ch5, ch6_plug_button|ch6, ch7_plug_button|ch7]
+                - ["#[ 10 ] empty", ch10_led, ch10_button|Switch]
+                - ["#[ 11 ] empty", ch11_led, ch11_button|Switch]
+                - ["#[ 12 ] empty", ch12_led, ch12_button|Switch]
             header:
                 title: Source Control
