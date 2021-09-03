@@ -13,6 +13,7 @@ https://github.com/semool/kvmd/commit/d950c1c771ad30d5f2adea62a1d7eb6082f1da69
 
 # Hue Plugin to Control SmartPlugs
 https://github.com/semool/kvmd/commit/4133981cabc049a3c5f4f86ee7ff0617ba28a0d7
+https://github.com/semool/kvmd/commit/93cdf2700030a362cde180de76845b223f4bcddc
 
 - http://[BridgeIP]/debug/clip.html
 - Send Message: {"devicetype":"pikvm"}
