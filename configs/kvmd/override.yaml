@@ -160,54 +160,94 @@ kvmd:
         scheme:
             ch1_plug_button:
                 driver: ch1_plug
-                pin: 0
+                pin: 1
                 mode: output
                 switch: false
+            ch1_plug_led:
+                driver: ch1_plug
+                pin: 1
+                mode: input
             ch2_plug_button:
                 driver: ch2_plug
-                pin: 0
+                pin: 2
                 mode: output
                 switch: false
+            ch2_plug_led:
+                driver: ch2_plug
+                pin: 2
+                mode: input
             ch3_plug_button:
                 driver: ch3_plug
-                pin: 0
+                pin: 3
                 mode: output
                 switch: false
+            ch3_plug_led:
+                driver: ch3_plug
+                pin: 3
+                mode: input
             ch5_plug_button:
                 driver: ch5_plug
-                pin: 0
+                pin: 5
                 mode: output
                 switch: false
+            ch5_plug_led:
+                driver: ch5_plug
+                pin: 5
+                mode: input
             ch6_plug_button:
                 driver: ch6_plug
-                pin: 0
+                pin: 6
                 mode: output
                 switch: false
+            ch6_plug_led:
+                driver: ch6_plug
+                pin: 6
+                mode: input
             ch7_plug_button:
                 driver: ch7_plug
-                pin: 0
+                pin: 7
                 mode: output
                 switch: false
+            ch7_plug_led:
+                driver: ch7_plug
+                pin: 7
+                mode: input
             ch9_plug_button:
                 driver: ch9_plug
-                pin: 0
+                pin: 9
                 mode: output
                 switch: false
+            ch9_plug_led:
+                driver: ch9_plug
+                pin: 9
+                mode: input
             ch10_plug_button:
                 driver: ch10_plug
-                pin: 0
+                pin: 10
                 mode: output
                 switch: false
+            ch10_plug_led:
+                driver: ch10_plug
+                pin: 10
+                mode: input
             ch11_plug_button:
                 driver: ch11_plug
-                pin: 0
+                pin: 11
                 mode: output
                 switch: false
+            ch11_plug_led:
+                driver: ch11_plug
+                pin: 11
+                mode: input
             ch12_plug_button:
                 driver: ch12_plug
-                pin: 0
+                pin: 12
                 mode: output
                 switch: false
+            ch12_plug_led:
+                driver: ch12_plug
+                pin: 12
+                mode: input
             ch1_wol_button:
                 driver: ch1_wol
                 pin: 0

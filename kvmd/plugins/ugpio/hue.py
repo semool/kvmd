@@ -56,6 +56,7 @@ class Plugin(BaseUserGpioDriver):  # pylint: disable=too-many-instance-attribute
         self.__ip = ip
         self.__username = username
         self.__device = device
+        self.__channel: Optional[int] = -1
 
     @classmethod
     def get_plugin_options(cls) -> Dict:
@@ -84,7 +85,17 @@ class Plugin(BaseUserGpioDriver):  # pylint: disable=too-many-instance-attribute
 
     async def read(self, pin: int) -> bool:
         _ = pin
-        return False
+        try:
+           url_status = f"http://{self.__ip}/api/{self.__username}/lights/{self.__device}"
+           r = requests.get(url_status, timeout=5)
+           data = r.json()
+           state = data['state']['on']
+           if state == True:
+              return True
+           else:
+              return False
+        except:
+           return False
 
     async def write(self, pin: int, state: bool) -> None:
         _ = pin
