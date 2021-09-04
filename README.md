@@ -22,4 +22,45 @@ https://github.com/semool/kvmd/commit/2b4a6d118f9a96a88c76ea15dfbe776d1a7dccd7
 - get back username: {	"success": {	"username": "apiusername"	}
 - get list of all Devices: http://[BridgeIP]/api/[username]/lights
 - Save DeviceID for every SmartPlug to control
-- Set BridgeIP, Username and DeviceID in override.yaml
+- Set BridgeIP, Username and DeviceID in override.yaml:
+
+```
+gpio:
+        drivers:
+            ch1_plug:
+               type: hue
+               ip: 192.168.1.7
+               username: ApiUsername
+               device: 27
+            ch2_plug:
+               type: hue
+               ip: 192.168.1.7
+               username: ApiUsername
+               device: 28
+
+        scheme:
+            ch1_plug_button:
+                driver: ch1_plug
+                pin: 1
+                mode: output
+                switch: false
+            ch1_plug_led:
+                driver: ch1_plug
+                pin: 1
+                mode: input
+            ch2_plug_button:
+                driver: ch2_plug
+                pin: 2
+                mode: output
+                switch: false
+            ch2_plug_led:
+                driver: ch2_plug
+                pin: 2
+                mode: input
+
+        view:
+            table:
+                - ["#Power:", ch1_plug_led, ch1_plug_button|confirm|Toggle]
+                - ["#Power:", ch2_plug_led, ch2_plug_button|confirm|Toggle]
+
+```
