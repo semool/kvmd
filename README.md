@@ -15,6 +15,7 @@ https://github.com/semool/kvmd/commit/d950c1c771ad30d5f2adea62a1d7eb6082f1da69
 https://github.com/semool/kvmd/commit/4133981cabc049a3c5f4f86ee7ff0617ba28a0d7
 https://github.com/semool/kvmd/commit/93cdf2700030a362cde180de76845b223f4bcddc
 https://github.com/semool/kvmd/commit/1144ed9582c75d9a68b0a41b9e3676eac1fffc5d
+https://github.com/semool/kvmd/commit/2b4a6d118f9a96a88c76ea15dfbe776d1a7dccd7
 
 - http://[BridgeIP]/debug/clip.html
 - Send Message: {"devicetype":"pikvm"}
