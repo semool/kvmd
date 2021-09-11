@@ -24,7 +24,9 @@ import socket
 import functools
 
 from typing import Dict
+from typing import Callable
 from typing import Optional
+from typing import Any
 
 from ...logging import get_logger
 
@@ -66,28 +68,15 @@ class Plugin(BaseUserGpioDriver):  # pylint: disable=too-many-instance-attribute
             "mac":  Option("", type=valid_mac, if_empty=""),
         }
 
-    def register_input(self, pin: int, debounce: float) -> None:
-        _ = pin
-        _ = debounce
+    @classmethod
+    def get_pin_validator(cls) -> Callable[[Any], Any]:
+        return str
 
-    def register_output(self, pin: int, initial: Optional[bool]) -> None:
-        _ = pin
-        _ = initial
-
-    def prepare(self) -> None:
-        get_logger(0).info("Probing driver %s on MAC %s and %s:%d ...", self, self.__mac, self.__ip, self.__port)
-
-    async def run(self) -> None:
-        await aiotools.wait_infinite()
-
-    async def cleanup(self) -> None:
-        pass
-
-    async def read(self, pin: int) -> bool:
+    async def read(self, pin: str) -> bool:
         _ = pin
         return False
 
-    async def write(self, pin: int, state: bool) -> None:
+    async def write(self, pin: str, state: bool) -> None:
         _ = pin
         if not state:
             return
