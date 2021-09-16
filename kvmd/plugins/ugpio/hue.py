@@ -1,6 +1,6 @@
 # ========================================================================== #
 #                                                                            #
-#    KVMD - The main Pi-KVM daemon.                                          #
+#    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
 #    Copyright (C) 2018-2021  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
@@ -20,20 +20,26 @@
 # ========================================================================== #
 
 
-import functools
-import requests
-import json
+import asyncio
 
 from typing import Dict
+from typing import Callable
 from typing import Optional
+from typing import Any
+
+import aiohttp
 
 from ...logging import get_logger
 
+from ... import tools
 from ... import aiotools
+from ... import htclient
 
 from ...yamlconf import Option
 
-from ...validators.net import valid_ip
+from ...validators.basic import valid_stripped_string_not_empty
+from ...validators.basic import valid_bool
+from ...validators.basic import valid_float_f01
 
 from . import GpioDriverOfflineError
 from . import BaseUserGpioDriver
@@ -41,88 +47,121 @@ from . import BaseUserGpioDriver
 
 # =====
 class Plugin(BaseUserGpioDriver):  # pylint: disable=too-many-instance-attributes
-    def __init__(  # pylint: disable=super-init-not-called
+    # https://developers.meethue.com/develop/hue-api/lights-api
+    # https://www.burgestrand.se/hue-api/api/lights
+
+    def __init__(
         self,
         instance_name: str,
         notifier: aiotools.AioNotifier,
 
-        ip: str,
-        username: int,
-        device: str,
+        url: str,
+        verify: bool,
+        token: str,
+        state_poll: float,
+        timeout: float,
     ) -> None:
 
         super().__init__(instance_name, notifier)
 
-        self.__ip = ip
-        self.__username = username
-        self.__device = device
-        self.__channel: Optional[int] = -1
+        self.__url = url
+        self.__verify = verify
+        self.__token = token
+        self.__state_poll = state_poll
+        self.__timeout = timeout
+
+        self.__initial: Dict[str, Optional[bool]] = {}
+
+        self.__state: Dict[str, Optional[bool]] = {}
+        self.__update_notifier = aiotools.AioNotifier()
+
+        self.__http_session: Optional[aiohttp.ClientSession] = None
 
     @classmethod
     def get_plugin_options(cls) -> Dict:
         return {
-            "ip":   Option("255.255.255.255", type=functools.partial(valid_ip, v6=False)),
-            "username": Option(""),
-            "device":  Option(""),
+            "url":        Option("",   type=valid_stripped_string_not_empty),
+            "verify":     Option(True, type=valid_bool),
+            "token":      Option("",   type=valid_stripped_string_not_empty),
+            "state_poll": Option(5.0,  type=valid_float_f01),
+            "timeout":    Option(5.0,  type=valid_float_f01),
         }
 
-    def register_input(self, pin: int, debounce: float) -> None:
-        _ = pin
-        _ = debounce
+    @classmethod
+    def get_pin_validator(cls) -> Callable[[Any], Any]:
+        return valid_stripped_string_not_empty
 
-    def register_output(self, pin: int, initial: Optional[bool]) -> None:
-        _ = pin
-        _ = initial
+    def register_input(self, pin: str, debounce: float) -> None:
+        _ = debounce
+        self.__state[pin] = None
+
+    def register_output(self, pin: str, initial: Optional[bool]) -> None:
+        self.__initial[pin] = initial
+        self.__state[pin] = None
 
     def prepare(self) -> None:
-        get_logger(0).info("Probing driver %s on Device %s and IP %s ...", self, self.__device, self.__ip)
+        async def inner_prepare() -> None:
+            await asyncio.gather(*[
+                self.write(pin, state)
+                for (pin, state) in self.__initial.items()
+                if state is not None
+            ], return_exceptions=True)
+        aiotools.run_sync(inner_prepare())
 
     async def run(self) -> None:
-        await aiotools.wait_infinite()
+        prev_state: Optional[Dict] = None
+        while True:
+            session = self.__ensure_http_session()
+            try:
+                async with session.get(f"{self.__url}/api/{self.__token}/lights") as response:
+                    results = await response.json()
+                    for pin in self.__state:
+                        if pin in results:
+                            self.__state[pin] = bool(results[pin]["state"]["on"])
+            except Exception as err:
+                get_logger().error("Failed Hue bulk GET request: %s", tools.efmt(err))
+                self.__state = dict.fromkeys(self.__state, None)
+            if self.__state != prev_state:
+                await self._notifier.notify()
+                prev_state = self.__state
+            await self.__update_notifier.wait(self.__state_poll)
 
     async def cleanup(self) -> None:
-        pass
+        if self.__http_session:
+            await self.__http_session.close()
+            self.__http_session = None
 
-    async def read(self, pin: int) -> bool:
-        _ = pin
-        try:
-           url_status = f"http://{self.__ip}/api/{self.__username}/lights/{self.__device}"
-           r = requests.get(url_status, timeout=5)
-           data = r.json()
-           state = data['state']['on']
-           if state == True:
-              return True
-           else:
-              return False
-        except:
-           return False
-
-    async def write(self, pin: int, state: bool) -> None:
-        _ = pin
-        if not state:
-            return
-
-        try:
-            url_status = f"http://{self.__ip}/api/{self.__username}/lights/{self.__device}"
-            url_set = f"http://{self.__ip}/api/{self.__username}/lights/{self.__device}/state"
-
-            r = requests.get(url_status, timeout=5)
-            data = r.json()
-            name = data['name']
-            state = data['state']['on']
-
-            if state == True:
-               get_logger(0).info(f"Smartplug (Device: %s with name: %s) Power State: %s -> Switch to False", self.__device, name, state)
-               data_set = {"on":False}
-            else:
-               get_logger(0).info(f"Smartplug (Device: %s with name: %s) Power State: %s -> Switch to True", self.__device, name, state)
-               data_set = {"on":True}
-            r = requests.put(url_set, json.dumps(data_set), timeout=5)
-
-        except Exception:
-            get_logger(0).exception("Can't send to HUE Api on IP: %s", self.__ip)
+    async def read(self, pin: str) -> bool:
+        if self.__state[pin] is None:
             raise GpioDriverOfflineError(self)
+        return self.__state[pin]  # type: ignore
 
+    async def write(self, pin: str, state: bool) -> None:
+        session = self.__ensure_http_session()
+        try:
+            async with session.put(
+                url=f"{self.__url}/api/{self.__token}/lights/{pin}/state",
+                json={"on": state},
+            ) as response:
+                htclient.raise_not_200(response)
+        except Exception as err:
+            get_logger().error("Failed Hue PUT request to pin %s: %s", pin, tools.efmt(err))
+            raise GpioDriverOfflineError(self)
+        else:
+            await self.__update_notifier.notify()
+
+    def __ensure_http_session(self) -> aiohttp.ClientSession:
+        if not self.__http_session:
+            kwargs: Dict = {
+                "headers": {
+                    "User-Agent": htclient.make_user_agent("KVMD"),
+                },
+                "timeout": aiohttp.ClientTimeout(total=self.__timeout),
+            }
+            if not self.__verify:
+                kwargs["connector"] = aiohttp.TCPConnector(ssl=False)
+            self.__http_session = aiohttp.ClientSession(**kwargs)
+        return self.__http_session
 
     def __str__(self) -> str:
         return f"Hue({self._instance_name})"
