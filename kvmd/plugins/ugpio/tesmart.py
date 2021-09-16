@@ -21,10 +21,13 @@
 
 
 import asyncio
+import functools
 
 from typing import Tuple
 from typing import Dict
+from typing import Callable
 from typing import Optional
+from typing import Any
 
 from ...logging import get_logger
 
@@ -33,6 +36,7 @@ from ... import aiotools
 
 from ...yamlconf import Option
 
+from ...validators.basic import valid_number
 from ...validators.basic import valid_float_f0
 from ...validators.basic import valid_float_f01
 from ...validators.net import valid_ip_or_host
@@ -79,18 +83,9 @@ class Plugin(BaseUserGpioDriver):  # pylint: disable=too-many-instance-attribute
             "state_poll":   Option(10.0, type=valid_float_f01),
         }
 
-    def register_input(self, pin: int, debounce: float) -> None:
-        if not (0 <= pin < 16):
-            raise RuntimeError(f"Unsupported port number: {pin}")
-        _ = debounce
-
-    def register_output(self, pin: int, initial: Optional[bool]) -> None:
-        if not (0 <= pin < 16):
-            raise RuntimeError(f"Unsupported port number: {pin}")
-        _ = initial
-
-    def prepare(self) -> None:
-        pass
+    @classmethod
+    def get_pin_validator(cls) -> Callable[[Any], Any]:
+        return functools.partial(valid_number, min=0, max=15, name="Tesmart channel")
 
     async def run(self) -> None:
         prev_active = -2
@@ -107,12 +102,14 @@ class Plugin(BaseUserGpioDriver):  # pylint: disable=too-many-instance-attribute
     async def cleanup(self) -> None:
         await self.__close_device()
 
-    async def read(self, pin: int) -> bool:
-        return (self.__active == pin)
+    async def read(self, pin: str) -> bool:
+        return (self.__active == int(pin))
 
-    async def write(self, pin: int, state: bool) -> None:
+    async def write(self, pin: str, state: bool) -> None:
+        channel = int(pin) + 1
+        assert 1 <= channel <= 16
         if state:
-            await self.__send_command("{:c}{:c}".format(1, pin + 1).encode())
+            await self.__send_command("{:c}{:c}".format(1, channel).encode())
             await self.__update_notifier.notify()
             await asyncio.sleep(self.__switch_delay)  # Slowdown
 
