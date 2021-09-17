@@ -5,6 +5,14 @@
 This repository contains the configuration and code of KVMD, the main PIKVM daemon.
 If your request does not relate directly to this codebase, please send it to issues of the [PiKVM](https://github.com/pikvm/pikvm/issues) repository.
 
+# Update from git
+rw
+pacman -Syu
+git clone --depth=1 https://github.com/pikvm/kvmd
+cp -r kvmd/kvmd /usr/lib/python3.9/site-packages/
+cp -r kvmd/web  /usr/share/kvmd/
+reboot
+
 # 2x Ezcoo KVM 4x Switch Patch (7 usable Ports)
 https://github.com/semool/kvmd/commit/1f9448cbc07cefbe0d32b7178596178e8cac0b03
 
