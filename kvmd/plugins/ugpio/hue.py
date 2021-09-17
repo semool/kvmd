@@ -25,7 +25,9 @@ import requests
 import json
 
 from typing import Dict
+from typing import Callable
 from typing import Optional
+from typing import Any
 
 from ...logging import get_logger
 
@@ -56,7 +58,6 @@ class Plugin(BaseUserGpioDriver):  # pylint: disable=too-many-instance-attribute
         self.__ip = ip
         self.__username = username
         self.__device = device
-        self.__channel: Optional[int] = -1
 
     @classmethod
     def get_plugin_options(cls) -> Dict:
@@ -66,38 +67,22 @@ class Plugin(BaseUserGpioDriver):  # pylint: disable=too-many-instance-attribute
             "device":  Option(""),
         }
 
-    def register_input(self, pin: int, debounce: float) -> None:
-        _ = pin
-        _ = debounce
+    @classmethod
+    def get_pin_validator(cls) -> Callable[[Any], Any]:
+        return str
 
-    def register_output(self, pin: int, initial: Optional[bool]) -> None:
-        _ = pin
-        _ = initial
-
-    def prepare(self) -> None:
-        get_logger(0).info("Probing driver %s on Device %s and IP %s ...", self, self.__device, self.__ip)
-
-    async def run(self) -> None:
-        await aiotools.wait_infinite()
-
-    async def cleanup(self) -> None:
-        pass
-
-    async def read(self, pin: int) -> bool:
+    async def read(self, pin: str) -> bool:
         _ = pin
         try:
            url_status = f"http://{self.__ip}/api/{self.__username}/lights/{self.__device}"
            r = requests.get(url_status, timeout=5)
            data = r.json()
            state = data['state']['on']
-           if state == True:
-              return True
-           else:
-              return False
+           return state
         except:
            return False
 
-    async def write(self, pin: int, state: bool) -> None:
+    async def write(self, pin: str, state: bool) -> None:
         _ = pin
         if not state:
             return
@@ -122,7 +107,6 @@ class Plugin(BaseUserGpioDriver):  # pylint: disable=too-many-instance-attribute
         except Exception:
             get_logger(0).exception("Can't send to HUE Api on IP: %s", self.__ip)
             raise GpioDriverOfflineError(self)
-
 
     def __str__(self) -> str:
         return f"Hue({self._instance_name})"
