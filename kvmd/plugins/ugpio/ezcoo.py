@@ -198,7 +198,11 @@ class Plugin(BaseUserGpioDriver):  # pylint: disable=too-many-instance-attribute
            for device in device_udev:
               tty = serial.Serial(device, self.__speed, timeout=self.__read_timeout)
               channel= int(3) # Passthrough Port on ezcoo1
-              tty.write((b"%s OUT1 VS IN%d\n" % (cmd, channel + 1)) * 2)
+              cmd = b"%s OUT1 VS IN%d\n" % (
+                  (b"SET" if self.__protocol == 1 else b"EZS"),
+                  channel + 1,
+              )
+              tty.write(cmd * 2)
               tty.flush()
 
     def __str__(self) -> str:
