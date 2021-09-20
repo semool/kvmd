@@ -71,6 +71,18 @@ export function Recorder() {
 		__recordEvent({"event_type": "print", "event": {"text": text}});
 	};
 
+	self.recordAtxButtonEvent = function(button) {
+		__recordEvent({"event_type": "atx_button", "event": {"button": button}});
+	};
+
+	self.recordGpioSwitchEvent = function(channel, to) {
+		__recordEvent({"event_type": "gpio_switch", "event": {"channel": channel, "state": to}});
+	};
+
+	self.recordGpioPulseEvent = function(channel) {
+		__recordEvent({"event_type": "gpio_pulse", "event": {"channel": channel}});
+	};
+
 	var __recordEvent = function(event) {
 		if (__recording) {
 			let now = new Date().getTime();
@@ -163,8 +175,15 @@ export function Recorder() {
 							__checkType(event.event.delta, "object", "Non-object mouse wheel delta");
 							__checkInt(event.event.delta.x, "Non-int mouse delta X");
 							__checkInt(event.event.delta.y, "Non-int mouse delta Y");
+						} else if (event.event_type === "atx_button") {
+							__checkType(event.event.button, "string", "Non-string ATX button");
+						} else if (event.event_type === "gpio_switch") {
+							__checkType(event.event.channel, "string", "Non-string GPIO channel");
+							__checkType(event.event.state, "boolean", "Non-bool GPIO state");
+						} else if (event.event_type === "gpio_pulse") {
+							__checkType(event.event.channel, "string", "Non-string GPIO channel");
 						} else {
-							throw "Unknown event type";
+							throw `Unknown event type: ${event.event_type}`;
 						}
 
 						events.push(event);
@@ -199,9 +218,11 @@ export function Recorder() {
 		while (index < __events.length) {
 			__setCounters(__events.length - index + 1, __events_time - time);
 			let event = __events[index];
+
 			if (event.event_type === "delay") {
 				__play_timer = setTimeout(() => __runEvents(index + 1, time + event.event.millis), event.event.millis);
 				return;
+
 			} else if (event.event_type === "print") {
 				let http = tools.makeRequest("POST", "/api/hid/print?limit=0", function() {
 					if (http.readyState === 4) {
@@ -217,9 +238,43 @@ export function Recorder() {
 					}
 				}, event.event.text, "text/plain");
 				return;
+
+			} else if (event.event_type === "atx_button") {
+				let http = tools.makeRequest("POST", `/api/atx/click?button=${event.event.button}`, function() {
+					if (http.readyState === 4) {
+						if (http.status !== 200) {
+							wm.error("ATX error:<br>", http.responseText);
+							__stopProcess();
+						} else if (http.status === 200) {
+							__play_timer = setTimeout(() => __runEvents(index + 1, time), 0);
+						}
+					}
+				});
+				return;
+
+			} else if (["gpio_switch", "gpio_pulse"].includes(event.event_type)) {
+				let path = "/api/gpio";
+				if (event.event_type === "gpio_switch") {
+					path += `/switch?channel=${event.event.channel}&state=${event.event.to}`;
+				} else { // gpio_pulse
+					path += `/pulse?channel=${event.event.channel}`;
+				}
+				let http = tools.makeRequest("POST", path, function() {
+					if (http.readyState === 4) {
+						if (http.status !== 200) {
+							wm.error("GPIO error:<br>", http.responseText);
+							__stopProcess();
+						} else if (http.status === 200) {
+							__play_timer = setTimeout(() => __runEvents(index + 1, time), 0);
+						}
+					}
+				});
+				return;
+
 			} else if (["key", "mouse_button", "mouse_move", "mouse_wheel"].includes(event.event_type)) {
 				__ws.send(JSON.stringify(event));
 			}
+
 			index += 1;
 		}
 		if ($("hid-recorder-loop-switch").checked) {
