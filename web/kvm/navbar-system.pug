@@ -16,6 +16,12 @@ li(class="right")
 					button(data-force-hide-menu id="gpio-button-__wol__" class="gpio-button small" data-channel="__wol__"
 						data-confirm="Are you sure to send Wake-on-LAN packet to the server?") &bull; WoL
 		hr
+		div(id="stream-message-no-webrtc" class="hidden")
+			+menu_message("warning", "WebRTC is not supported by this browser")
+			hr
+		div(id="stream-message-no-h264" class="hidden")
+			+menu_message("warning", "H.264 is not supported by this browser")
+			hr
 		table(class="kv" style="width: calc(100% - 20px)")
 			tr(id="stream-resolution" class="feature-disabled")
 				td Resolution:
@@ -55,6 +61,10 @@ li(class="right")
 					td Mouse #[a(target="_blank" href="https://github.com/pikvm/pikvm/blob/master/pages/mouse.md") mode]:
 					td #[div(id="hid-outputs-mouse-box" class="radio-box")]
 		table(class="kv")
+			tr
+				td Mouse polling rate:
+				td #[input(type="range" id="hid-mouse-rate-slider" class="slider")]
+				td(id="hid-mouse-rate-value" class="value" style="min-width: 30px; max-width:30px")
 			tr(id="hid-mouse-sens" class="feature-disabled")
 				td Relative mouse sensitivity:
 				td #[input(disabled type="range" id="hid-mouse-sens-slider" class="slider")]
