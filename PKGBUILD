@@ -31,7 +31,7 @@ for _variant in "${_variants[@]}"; do
 	pkgname+=(kvmd-platform-$_platform-$_board)
 done
 pkgbase=kvmd
-pkgver=3.31
+pkgver=3.41
 pkgrel=1
 pkgdesc="The main PiKVM daemon"
 url="https://github.com/pikvm/kvmd"
@@ -82,6 +82,13 @@ depends=(
 	# Avoid dhcpcd stack trace
 	dhclient
 	netctl
+
+	# Bootconfig
+	dos2unix
+	parted
+	e2fsprogs
+	openssh
+	wpa_supplicant
 )
 conflicts=(
 	python-pikvm
@@ -145,6 +152,7 @@ package_kvmd() {
 	install -Dm644 -t "$pkgdir/etc/kvmd" "$_cfg_default/kvmd"/*.yaml
 	install -Dm600 -t "$pkgdir/etc/kvmd" "$_cfg_default/kvmd"/*passwd
 	install -Dm644 -t "$pkgdir/etc/kvmd" "$_cfg_default/kvmd"/web.css
+	mkdir -p "$pkgdir/etc/kvmd/override.d"
 
 	mkdir -p "$pkgdir/var/lib/kvmd/msd"
 

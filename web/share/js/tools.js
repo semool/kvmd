@@ -129,38 +129,66 @@ export var tools = new function() {
 
 	self.slider = new function() {
 		return {
-			"setOnUp": function(el, delay, display_callback, execute_callback) {
-				el.execution_timer = null;
-				el.activated = false;
+			"setOnUpDelayed": function(el, delay, execute_callback) {
+				el.__execution_timer = null;
+				el.__pressed = false;
+				el.__postponed = null;
 
 				let clear_timer = function() {
-					if (el.execution_timer) {
-						clearTimeout(el.execution_timer);
-						el.execution_timer = null;
+					if (el.__execution_timer) {
+						clearTimeout(el.__execution_timer);
+						el.__execution_timer = null;
 					}
 				};
 
-				el.oninput = el.onchange = () => display_callback(el.value);
-
 				el.onmousedown = el.ontouchstart = function() {
 					clear_timer();
-					el.activated = true;
+					el.__pressed = true;
 				};
 
 				el.onmouseup = el.ontouchend = function(event) {
-					let value = el.value;
+					let value = self.slider.getValue(el);
 					event.preventDefault();
 					clear_timer();
-					el.execution_timer = setTimeout(function() {
+					el.__execution_timer = setTimeout(function() {
+						el.__pressed = false;
+						if (el.__postponed !== null) {
+							self.slider.setValue(el, el.__postponed);
+							el.__postponed = null;
+						}
 						execute_callback(value);
 					}, delay);
 				};
 			},
-			"setParams": function(el, min, max, step, value) {
+			"setParams": function(el, min, max, step, value, display_callback=null) {
 				el.min = min;
 				el.max = max;
 				el.step = step;
 				el.value = value;
+				if (display_callback) {
+					el.oninput = el.onchange = () => display_callback(self.slider.getValue(el));
+					display_callback(self.slider.getValue(el));
+					el.__display_callback = display_callback;
+				}
+			},
+			"setValue": function(el, value) {
+				if (el.value != value) {
+					if (el.__pressed) {
+						el.__postponed = value;
+					} else {
+						el.value = value;
+						if (el.__display_callback) {
+							el.__display_callback(value);
+						}
+					}
+				}
+			},
+			"getValue": function(el) {
+				if (el.step % 1 === 0) {
+					return parseInt(el.value);
+				} else {
+					return parseFloat(el.value);
+				}
 			},
 		};
 	};
