@@ -31,7 +31,7 @@ for _variant in "${_variants[@]}"; do
 	pkgname+=(kvmd-platform-$_platform-$_board)
 done
 pkgbase=kvmd
-pkgver=3.41
+pkgver=3.45
 pkgrel=1
 pkgdesc="The main PiKVM daemon"
 url="https://github.com/pikvm/kvmd"
@@ -60,7 +60,7 @@ depends=(
 	python-hidapi
 	libgpiod
 	freetype2
-	v4l-utils
+	"v4l-utils>=1.22.1-1"
 	nginx-mainline
 	openssl
 	platformio
@@ -100,7 +100,7 @@ md5sums=(SKIP)
 backup=(
 	etc/kvmd/{override,logging,auth,meta}.yaml
 	etc/kvmd/{ht,ipmi,vnc}passwd
-	etc/kvmd/nginx/{kvmd.ctx-{http,server},loc-{login,nocache,proxy,websocket},mime-types,ssl,nginx}.conf
+	etc/kvmd/nginx/{kvmd.ctx-{http,server},listen-http{,s},loc-{login,nocache,proxy,websocket},mime-types,ssl,redirect-to-https,nginx}.conf
 	etc/kvmd/janus/janus{,.plugin.ustreamer,.transport.websockets}.jcfg
 	etc/kvmd/web.css
 )
@@ -121,6 +121,8 @@ package_kvmd() {
 	cd "$srcdir/$pkgname-build"
 	python setup.py install --root="$pkgdir"
 
+	install -Dm755 -t "$pkgdir/usr/bin" scripts/kvmd-{bootconfig,gencert}
+
 	install -Dm644 -t "$pkgdir/usr/lib/systemd/system" configs/os/services/*.service
 	install -DTm644 configs/os/sysusers.conf "$pkgdir/usr/lib/sysusers.d/kvmd.conf"
 	install -DTm644 configs/os/tmpfiles.conf "$pkgdir/usr/lib/tmpfiles.d/kvmd.conf"
@@ -134,7 +136,6 @@ package_kvmd() {
 	cp -r configs/* "$_cfg_default"
 
 	find "$pkgdir" -name ".gitignore" -delete
-	sed -i -e "s/^#PROD//g" "$_cfg_default/nginx/nginx.conf"
 	find "$_cfg_default" -type f -exec chmod 444 '{}' \;
 	chmod 400 "$_cfg_default/kvmd"/*passwd
 	chmod 750 "$_cfg_default/os/sudoers"
@@ -143,7 +144,7 @@ package_kvmd() {
 	mkdir -p "$pkgdir/etc/kvmd/"{nginx,vnc}"/ssl"
 	chmod 755 "$pkgdir/etc/kvmd/"{nginx,vnc}"/ssl"
 	install -Dm444 -t "$pkgdir/etc/kvmd/nginx" "$_cfg_default/nginx"/*.conf
-	chmod 644 "$pkgdir/etc/kvmd/nginx/nginx.conf"
+	chmod 644 "$pkgdir/etc/kvmd/nginx/"{nginx,redirect-to-https,ssl,listen-http{,s}}.conf
 
 	mkdir -p "$pkgdir/etc/kvmd/janus"
 	chmod 755 "$pkgdir/etc/kvmd/janus"
@@ -184,6 +185,10 @@ for _variant in "${_variants[@]}"; do
 			etc/udev/rules.d/99-kvmd.rules
 			etc/kvmd/main.yaml
 		)
+
+		if [[ $_platform =~ ^.*-hdmiusb$ ]]; then
+			install -Dm755 -t \"\$pkgdir/usr/bin\" scripts/kvmd-udev-hdmiusb-check
+		fi
 
 		install -DTm644 configs/os/sysctl.conf \"\$pkgdir/etc/sysctl.d/99-kvmd.conf\"
 		install -DTm644 configs/os/udev/$_platform-$_board.rules \"\$pkgdir/etc/udev/rules.d/99-kvmd.rules\"

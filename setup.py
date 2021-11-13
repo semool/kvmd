@@ -21,7 +21,6 @@
 # ========================================================================== #
 
 
-import os
 import textwrap
 
 import setuptools.command.easy_install
@@ -67,7 +66,7 @@ def main() -> None:
 
     setup(
         name="kvmd",
-        version="3.41",
+        version="3.45",
         url="https://github.com/pikvm/kvmd",
         license="GPLv3",
         author="Maxim Devaev",
@@ -116,12 +115,6 @@ def main() -> None:
         package_data={
             "kvmd.apps.vnc": ["fonts/*.ttf"],
         },
-
-        scripts=[
-            os.path.join("scripts", name)
-            for name in os.listdir("scripts")
-            if not name.startswith(".")
-        ],
 
         entry_points={
             "console_scripts": [
