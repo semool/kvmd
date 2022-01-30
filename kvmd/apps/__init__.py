@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2021  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2022  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -120,11 +120,16 @@ def init(
     argv = (argv or sys.argv)
     assert len(argv) > 0
 
-    args_parser = argparse.ArgumentParser(prog=(prog or argv[0]), description=description, add_help=add_help)
-    args_parser.add_argument("-c", "--config", dest="config_path", default="/etc/kvmd/main.yaml", metavar="<file>",
-                             type=valid_abs_file, help="Set config file path")
+    args_parser = argparse.ArgumentParser(
+        prog=(prog or argv[0]),
+        description=description,
+        add_help=add_help,
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    args_parser.add_argument("-c", "--config", dest="config_path", default="/etc/kvmd/main.yaml", type=valid_abs_file,
+                             help="Set config file path", metavar="<file>")
     args_parser.add_argument("-o", "--set-options", dest="set_options", default=[], nargs="+",
-                             help="Override config options list (like sec/sub/opt=value)")
+                             help="Override config options list (like sec/sub/opt=value)", metavar="<k=v>",)
     args_parser.add_argument("-m", "--dump-config", dest="dump_config", action="store_true",
                              help="View current configuration (include all overrides)")
     if check_run:
@@ -446,6 +451,10 @@ def _get_config_scheme() -> Dict:
                 "cmd":        Option(["/bin/true"], type=valid_command),
                 "cmd_remove": Option([], type=valid_options),
                 "cmd_append": Option([], type=valid_options),
+            },
+
+            "ocr": {
+                "langs": Option(["eng"], type=valid_string_list, unpack_as="default_langs"),
             },
 
             "snapshot": {

@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2021  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2022  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -32,6 +32,7 @@ from typing import List
 from typing import Dict
 from typing import Set
 from typing import Callable
+from typing import Awaitable
 from typing import Coroutine
 from typing import AsyncGenerator
 from typing import Optional
@@ -68,6 +69,7 @@ from .logreader import LogReader
 from .ugpio import UserGpio
 from .streamer import Streamer
 from .snapshoter import Snapshoter
+from .tesseract import TesseractOcr
 
 from .http import HttpError
 from .http import HttpExposed
@@ -147,6 +149,7 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
         info_manager: InfoManager,
         log_reader: LogReader,
         user_gpio: UserGpio,
+        ocr: TesseractOcr,
 
         hid: BaseHid,
         atx: BaseAtx,
@@ -192,6 +195,7 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
         ]
 
         self.__hid_api = HidApi(hid, keymap_path, ignore_keys, mouse_x_range, mouse_y_range)  # Ugly hack to get keymaps state
+        self.__streamer_api = StreamerApi(streamer, ocr)  # Same hack to get ocr langs state
         self.__apis: List[object] = [
             self,
             AuthApi(auth_manager),
@@ -201,7 +205,7 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
             self.__hid_api,
             AtxApi(atx),
             MsdApi(msd),
-            StreamerApi(streamer),
+            self.__streamer_api,
             ExportApi(info_manager, atx, user_gpio),
             RedfishApi(info_manager, atx),
         ]
@@ -251,21 +255,27 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
     @exposed_http("GET", "/ws")
     async def __ws_handler(self, request: aiohttp.web.Request) -> aiohttp.web.WebSocketResponse:
         logger = get_logger(0)
+
         client = _WsClient(
             ws=aiohttp.web.WebSocketResponse(heartbeat=self.__heartbeat),
             stream=valid_bool(request.query.get("stream", "true")),
         )
         await client.ws.prepare(request)
         await self.__register_ws_client(client)
+
         try:
-            await self.__send_event(client.ws, "gpio_model_state", await self.__user_gpio.get_model())
-            await self.__send_event(client.ws, "hid_keymaps_state", self.__hid_api.get_keymaps())
-            await asyncio.gather(*[
-                self.__send_event(client.ws, component.event_type, await component.get_state())
-                for component in self.__components
-                if component.get_state
+            await self.__send_events_aws(client.ws, [
+                ("gpio_model_state", self.__user_gpio.get_model()),
+                ("hid_keymaps_state", self.__hid_api.get_keymaps()),
+                ("streamer_ocr_state", self.__streamer_api.get_ocr()),
+            ])
+            await self.__send_events_aws(client.ws, [
+                (comp.event_type, comp.get_state())
+                for comp in self.__components
+                if comp.get_state
             ])
             await self.__send_event(client.ws, "loop", {})
+
             async for msg in client.ws:
                 if msg.type == aiohttp.web.WSMsgType.TEXT:
                     try:
@@ -282,6 +292,7 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
                             logger.error("Unknown websocket event: %r", data)
                 else:
                     break
+
             return client.ws
         finally:
             await self.__remove_ws_client(client)
@@ -293,9 +304,9 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
     # ===== SYSTEM STUFF
 
     def run(self, **kwargs: Any) -> None:  # type: ignore  # pylint: disable=arguments-differ
-        for component in self.__components:
-            if component.sysprep:
-                component.sysprep()
+        for comp in self.__components:
+            if comp.sysprep:
+                comp.sysprep()
         aioproc.rename_process("main")
         super().run(**kwargs)
 
@@ -309,11 +320,11 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
         app.on_cleanup.append(self.__on_cleanup)
 
         self.__run_system_task(self.__stream_controller)
-        for component in self.__components:
-            if component.systask:
-                self.__run_system_task(component.systask)
-            if component.poll_state:
-                self.__run_system_task(self.__poll_state, component.event_type, component.poll_state())
+        for comp in self.__components:
+            if comp.systask:
+                self.__run_system_task(comp.systask)
+            if comp.poll_state:
+                self.__run_system_task(self.__poll_state, comp.event_type, comp.poll_state())
         self.__run_system_task(self.__stream_snapshoter)
 
         for api in self.__apis:
@@ -371,14 +382,23 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
 
     async def __on_cleanup(self, _: aiohttp.web.Application) -> None:
         logger = get_logger(0)
-        for component in self.__components:
-            if component.cleanup:
-                logger.info("Cleaning up %s ...", component.name)
+        for comp in self.__components:
+            if comp.cleanup:
+                logger.info("Cleaning up %s ...", comp.name)
                 try:
-                    await component.cleanup()  # type: ignore
+                    await comp.cleanup()  # type: ignore
                 except Exception:
-                    logger.exception("Cleanup error on %s", component.name)
+                    logger.exception("Cleanup error on %s", comp.name)
         logger.info("On-Cleanup complete")
+
+    async def __send_events_aws(self, ws: aiohttp.web.WebSocketResponse, sources: List[Tuple[str, Awaitable]]) -> None:
+        await asyncio.gather(*[
+            self.__send_event(ws, event_type, state)
+            for (event_type, state) in zip(
+                map(operator.itemgetter(0), sources),
+                await asyncio.gather(*map(operator.itemgetter(1), sources)),
+            )
+        ])
 
     async def __send_event(self, ws: aiohttp.web.WebSocketResponse, event_type: str, event: Optional[Dict]) -> None:
         await ws.send_str(json.dumps({

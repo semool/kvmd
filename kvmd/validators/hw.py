@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2021  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2022  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -55,4 +55,4 @@ def valid_otg_id(arg: Any) -> int:
 
 
 def valid_otg_ethernet(arg: Any) -> str:
-    return check_string_in_list(arg, "OTG Ethernet driver", ["ecm", "eem", "ncm", "rndis"])
+    return check_string_in_list(arg, "OTG Ethernet driver", ["ecm", "eem", "ncm", "rndis", "rndis5"])

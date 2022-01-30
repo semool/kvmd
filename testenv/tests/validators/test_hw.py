@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2021  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2022  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -121,7 +121,7 @@ def test_fail__valid_otg_id(arg: Any) -> None:
 
 
 # =====
-@pytest.mark.parametrize("arg", ["ECM ", "EeM ", "ncm ", " Rndis"])
+@pytest.mark.parametrize("arg", ["ECM ", "EeM ", "ncm ", " Rndis", "RNDIS5"])
 def test_ok__valid_otg_ethernet(arg: Any) -> None:
     assert valid_otg_ethernet(arg) == arg.strip().lower()
 

@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2021  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2022  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -75,6 +75,6 @@ class ExtrasInfoSubmanager(BaseInfoSubmanager):
             extras["port"] = 0
             config = self.__global_config
             for item in filter(None, map(str.strip, port_path.split("/"))):
-                config = getattr(config, item, None)
+                config = getattr(config, item, None)  # type: ignore
             if isinstance(config, int):
                 extras["port"] = config

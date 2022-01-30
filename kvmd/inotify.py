@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2021  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2022  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This source file is partially based on python-watchdog module.          #
 #                                                                            #
@@ -26,15 +26,10 @@ import sys
 import os
 import asyncio
 import ctypes
-import ctypes.util
 import struct
 import dataclasses
 import types
 import errno
-
-from ctypes import c_int
-from ctypes import c_char_p
-from ctypes import c_uint32
 
 from typing import Tuple
 from typing import List
@@ -45,38 +40,7 @@ from typing import Optional
 
 from .logging import get_logger
 
-
-# =====
-def _load_libc() -> ctypes.CDLL:
-    try:
-        path = ctypes.util.find_library("c")
-    except (OSError, IOError, RuntimeError):
-        pass
-    else:
-        if path:
-            return ctypes.CDLL(path)
-
-    names = ["libc.so", "libc.so.6", "libc.so.0"]
-    for (index, name) in enumerate(names):
-        try:
-            return ctypes.CDLL(name)
-        except (OSError, IOError):
-            if index == len(names) - 1:
-                raise
-
-    raise RuntimeError("Where is libc?")
-
-
-_libc = _load_libc()
-
-
-def _get_libc_func(name: str, restype, argtypes=None):  # type: ignore
-    return ctypes.CFUNCTYPE(restype, *(argtypes or []), use_errno=True)((name, _libc))
-
-
-_inotify_init = _get_libc_func("inotify_init", c_int)
-_inotify_add_watch = _get_libc_func("inotify_add_watch", c_int, [c_int, c_char_p, c_uint32])
-_inotify_rm_watch = _get_libc_func("inotify_rm_watch", c_int, [c_int, c_uint32])
+from . import libc
 
 
 # =====
@@ -235,7 +199,7 @@ class Inotify:
         path = os.path.normpath(path)
         assert path not in self.__wd_by_path, path
         get_logger().info("Watching for %s", path)
-        wd = _inotify_check(_inotify_add_watch(self.__fd, _fs_encode(path), mask))
+        wd = _inotify_check(libc.inotify_add_watch(self.__fd, _fs_encode(path), mask))
         self.__wd_by_path[path] = wd
         self.__path_by_wd[wd] = path
 
@@ -313,7 +277,7 @@ class Inotify:
 
     def __enter__(self) -> "Inotify":
         assert self.__fd < 0
-        self.__fd = _inotify_check(_inotify_init())
+        self.__fd = _inotify_check(libc.inotify_init())
         asyncio.get_event_loop().add_reader(self.__fd, self.__read_and_queue_events)
         return self
 
@@ -327,7 +291,7 @@ class Inotify:
         if self.__fd >= 0:
             asyncio.get_event_loop().remove_reader(self.__fd)
             for wd in list(self.__wd_by_path.values()):
-                _inotify_rm_watch(self.__fd, wd)
+                libc.inotify_rm_watch(self.__fd, wd)
             try:
                 os.close(self.__fd)
             except Exception:

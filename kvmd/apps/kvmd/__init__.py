@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2021  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2022  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -37,6 +37,7 @@ from .logreader import LogReader
 from .ugpio import UserGpio
 from .streamer import Streamer
 from .snapshoter import Snapshoter
+from .tesseract import TesseractOcr
 from .server import KvmdServer
 
 
@@ -86,6 +87,7 @@ def main(argv: Optional[List[str]]=None) -> None:
         info_manager=InfoManager(global_config),
         log_reader=LogReader(),
         user_gpio=UserGpio(config.gpio, global_config.otg.udc),
+        ocr=TesseractOcr(**config.ocr._unpack()),
 
         hid=hid,
         atx=get_atx_class(config.atx.type)(**config.atx._unpack(ignore=["type"])),

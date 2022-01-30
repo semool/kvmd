@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2021  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2022  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -173,10 +173,13 @@ class _Service:  # pylint: disable=too-many-instance-attributes
 
     def __find_iface(self) -> str:
         logger = get_logger()
+        real_driver = self.__driver
+        if self.__driver == "rndis5":
+            real_driver = "rndis"
         path = env.SYSFS_PREFIX + os.path.join(
             "/sys/kernel/config/usb_gadget",
             self.__gadget,
-            f"functions/{self.__driver}.usb0/ifname",
+            f"functions/{real_driver}.usb0/ifname",
         )
         logger.info("Using OTG gadget %r ...", self.__gadget)
         with open(path) as iface_file:

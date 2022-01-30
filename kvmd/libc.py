@@ -1,8 +1,10 @@
-/*****************************************************************************
+# ========================================================================== #
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
 #    Copyright (C) 2018-2022  Maxim Devaev <mdevaev@gmail.com>               #
+#                                                                            #
+#    This source file is partially based on python-watchdog module.          #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -17,31 +19,44 @@
 #    You should have received a copy of the GNU General Public License       #
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.  #
 #                                                                            #
-*****************************************************************************/
+# ========================================================================== #
 
 
-textarea#hid-pak-text {
-	display: block;
-	resize: none;
-	height: 150px;
-	width: 300px;
-	border: var(--border-default-thin);
-	border-radius: 4px;
-	color: var(--cs-code-default-fg);
-	background-color: var(--cs-code-default-bg);
-	-webkit-appearance:none;
-}
+import ctypes
+import ctypes.util
 
-textarea#hid-pak-text::-moz-placeholder {
-	line-height: 60px;
-	text-align: center;
-}
+from ctypes import c_int
+from ctypes import c_uint32
+from ctypes import c_char_p
+from ctypes import c_void_p
 
-textarea#hid-pak-text::-webkit-input-placeholder {
-	line-height: 60px;
-	text-align: center;
-}
 
-input#hid-recorder-new-script-file {
-	display: none;
-}
+# =====
+def _load_libc() -> ctypes.CDLL:
+    path = ctypes.util.find_library("c")
+    if not path:
+        raise RuntimeError("Where is libc?")
+    assert path
+    lib = ctypes.CDLL(path)
+    for (name, restype, argtypes) in [
+        ("inotify_init", c_int, []),
+        ("inotify_add_watch", c_int, [c_int, c_char_p, c_uint32]),
+        ("inotify_rm_watch", c_int, [c_int, c_uint32]),
+        ("free", c_int, [c_void_p]),
+    ]:
+        func = getattr(lib, name)
+        if not func:
+            raise RuntimeError(f"Where is libc.{name}?")
+        setattr(func, "restype", restype)
+        setattr(func, "argtypes", argtypes)
+    return lib
+
+
+_libc = _load_libc()
+
+
+# =====
+inotify_init = _libc.inotify_init
+inotify_add_watch = _libc.inotify_add_watch
+inotify_rm_watch = _libc.inotify_rm_watch
+free = _libc.free

@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2021  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2022  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -68,8 +68,12 @@ def _rmdir(path: str) -> None:
     os.rmdir(path)
 
 
-def _unlink(path: str) -> None:
-    get_logger().info("RM ------ %s", path)
+def _unlink(path: str, optional: bool=False) -> None:
+    logger = get_logger()
+    if optional and not os.access(path, os.F_OK):
+        logger.info("SKIP-RM - %s", path)
+        return
+    logger.info("RM ------ %s", path)
     os.unlink(path)
 
 
@@ -109,13 +113,30 @@ def _create_serial(gadget_path: str, config_path: str) -> None:
 def _create_ethernet(gadget_path: str, config_path: str, driver: str, host_mac: str, kvm_mac: str) -> None:
     if host_mac and kvm_mac and host_mac == kvm_mac:
         raise RuntimeError("Ethernet host_mac should not be equal to kvm_mac")
-    func_path = join(gadget_path, f"functions/{driver}.usb0")
+    real_driver = driver
+    if driver == "rndis5":
+        real_driver = "rndis"
+    func_path = join(gadget_path, f"functions/{real_driver}.usb0")
     _mkdir(func_path)
     if host_mac:
         _write(join(func_path, "host_addr"), host_mac)
     if kvm_mac:
         _write(join(func_path, "dev_addr"), kvm_mac)
-    _symlink(func_path, join(config_path, f"{driver}.usb0"))
+    if driver in ["ncm", "rndis"]:
+        _write(join(gadget_path, "os_desc/use"), "1")
+        _write(join(gadget_path, "os_desc/b_vendor_code"), "0xCD")
+        _write(join(gadget_path, "os_desc/qw_sign"), "MSFT100")
+        if driver == "ncm":
+            _write(join(func_path, "os_desc/interface.ncm/compatible_id"), "WINNCM")
+        elif driver == "rndis":
+            # On Windows 7 and later, the RNDIS 5.1 driver would be used by default,
+            # but it does not work very well. The RNDIS 6.0 driver works better.
+            # In order to get this driver to load automatically, we have to use
+            # a Microsoft-specific extension of USB.
+            _write(join(func_path, "os_desc/interface.rndis/compatible_id"), "RNDIS")
+            _write(join(func_path, "os_desc/interface.rndis/sub_compatible_id"), "5162001")
+        _symlink(config_path, join(gadget_path, "os_desc/c.1"))
+    _symlink(func_path, join(config_path, f"{real_driver}.usb0"))
 
 
 def _create_hid(gadget_path: str, config_path: str, instance: int, remote_wakeup: bool, hid: Hid) -> None:
@@ -174,7 +195,15 @@ def _cmd_start(config: Section) -> None:  # pylint: disable=too-many-statements
 
     _write(join(gadget_path, "idVendor"), f"0x{config.otg.vendor_id:04X}")
     _write(join(gadget_path, "idProduct"), f"0x{config.otg.product_id:04X}")
-    _write(join(gadget_path, "bcdDevice"), "0x0100")
+    # bcdDevice should be incremented any time there are breaking changes
+    # to this script so that the host OS sees it as a new device
+    # and re-enumerates everything rather than relying on cached values.
+    if config.otg.devices.ethernet.enabled and config.otg.devices.ethernet.driver == "ncm":
+        _write(join(gadget_path, "bcdDevice"), "0x0102")
+    elif config.otg.devices.ethernet.enabled and config.otg.devices.ethernet.driver == "rndis":
+        _write(join(gadget_path, "bcdDevice"), "0x0101")
+    else:
+        _write(join(gadget_path, "bcdDevice"), "0x0100")
     _write(join(gadget_path, "bcdUSB"), f"0x{config.otg.usb_version:04X}")
 
     lang_path = join(gadget_path, "strings/0x409")
@@ -249,6 +278,8 @@ def _cmd_stop(config: Section) -> None:
 
     logger.info("Disabling gadget %r ...", config.otg.gadget)
     _write(join(gadget_path, "UDC"), "")
+
+    _unlink(join(gadget_path, "os_desc/c.1"), True)
 
     config_path = join(gadget_path, "configs/c.1")
     for func in os.listdir(config_path):
