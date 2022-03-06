@@ -84,10 +84,7 @@ function __WindowManager() {
 			let el_close_button = el_window.querySelector(".window-header .window-button-close");
 			if (el_close_button) {
 				el_close_button.title = "Close window";
-				tools.el.setOnClick(el_close_button, function() {
-					__closeWindow(el_window);
-					__activateLastWindow(el_window);
-				});
+				tools.el.setOnClick(el_close_button, () => self.closeWindow(el_window));
 			}
 
 			let el_maximize_button = el_window.querySelector(".window-header .window-button-maximize");
@@ -139,6 +136,7 @@ function __WindowManager() {
 
 	/************************************************************************/
 
+	self.info = (...args) => __modalDialog("Info", args.join(" "), true, false, null);
 	self.error = (...args) => __modalDialog("Error", args.join(" "), true, false, null);
 	self.confirm = (...args) => __modalDialog("Question", args.join(" "), true, true, null);
 
@@ -253,6 +251,11 @@ function __WindowManager() {
 		};
 	};
 
+	self.closeWindow = function(el_window) {
+		__closeWindow(el_window);
+		__activateLastWindow(el_window);
+	};
+
 	var __closeWindow = function(el_window) {
 		el_window.focus();
 		el_window.blur();
@@ -336,7 +339,10 @@ function __WindowManager() {
 	};
 
 	var __globalMouseButtonHandler = function(event) {
-		if (!event.target.matches(".menu-button") && !event.target.closest(".modal")) {
+		if (
+			event.target.matches && !event.target.matches(".menu-button")
+			&& event.target.closest && !event.target.closest(".modal")
+		) {
 			for (let el_item = event.target; el_item && el_item !== document; el_item = el_item.parentNode) {
 				if (el_item.hasAttribute("data-force-hide-menu")) {
 					break;
@@ -460,6 +466,10 @@ function __WindowManager() {
 	var __makeWindowMovable = function(el_window) {
 		let el_header = el_window.querySelector(".window-header");
 		let el_grab = el_window.querySelector(".window-header .window-grab");
+		if (el_header === null || el_grab === null) {
+			// Для псевдоокна OCR
+			return;
+		}
 
 		let prev_pos = {x: 0, y: 0};
 
