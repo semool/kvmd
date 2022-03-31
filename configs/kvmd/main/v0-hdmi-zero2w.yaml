@@ -7,28 +7,18 @@ override: !include [override.d, override.yaml]
 logging: !include logging.yaml
 
 kvmd:
-    server:
-        unix: /run/kvmd/kvmd.sock
-
     auth: !include auth.yaml
 
     hid:
         type: serial
-        reset_pin: 4
-        device: /dev/kvmd-hid
 
     atx:
         type: gpio
-        power_led_pin: 24
-        hdd_led_pin: 22
-        power_switch_pin: 23
-        reset_switch_pin: 27
 
     msd:
         type: disabled
 
     streamer:
-        unix: /run/kvmd/ustreamer.sock
         h264_bitrate:
             default: 5000
         cmd:
@@ -57,25 +47,10 @@ kvmd:
             - "--h264-bitrate={h264_bitrate}"
             - "--h264-gop={h264_gop}"
 
-ipmi:
-    kvmd:
-        unix: /run/kvmd/kvmd.sock
 
 vnc:
-    kvmd:
-        unix: /run/kvmd/kvmd.sock
-
-    streamer:
-        unix: /run/kvmd/ustreamer.sock
-
     memsink:
         jpeg:
             sink: "kvmd::ustreamer::jpeg"
         h264:
             sink: "kvmd::ustreamer::h264"
-
-    server:
-        tls:
-            x509:
-                cert: /etc/kvmd/vnc/ssl/server.crt
-                key: /etc/kvmd/vnc/ssl/server.key

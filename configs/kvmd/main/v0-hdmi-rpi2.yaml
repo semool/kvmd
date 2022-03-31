@@ -7,28 +7,18 @@ override: !include [override.d, override.yaml]
 logging: !include logging.yaml
 
 kvmd:
-    server:
-        unix: /run/kvmd/kvmd.sock
-
     auth: !include auth.yaml
 
     hid:
         type: serial
-        reset_pin: 4
-        device: /dev/kvmd-hid
 
     atx:
         type: gpio
-        power_led_pin: 24
-        hdd_led_pin: 22
-        power_switch_pin: 23
-        reset_switch_pin: 27
 
     msd:
         type: disabled
 
     streamer:
-        unix: /run/kvmd/ustreamer.sock
         cmd:
             - "/usr/bin/ustreamer"
             - "--device=/dev/kvmd-video"
@@ -48,21 +38,3 @@ kvmd:
             - "--process-name-prefix={process_name_prefix}"
             - "--notify-parent"
             - "--no-log-colors"
-
-ipmi:
-    kvmd:
-        unix: /run/kvmd/kvmd.sock
-
-
-vnc:
-    kvmd:
-        unix: /run/kvmd/kvmd.sock
-
-    streamer:
-        unix: /run/kvmd/ustreamer.sock
-
-    server:
-        tls:
-            x509:
-                cert: /etc/kvmd/vnc/ssl/server.crt
-                key: /etc/kvmd/vnc/ssl/server.key

@@ -25,10 +25,12 @@ from typing import Set
 from ....yamlconf import Section
 
 from .base import BaseInfoSubmanager
+from .auth import AuthInfoSubmanager
 from .system import SystemInfoSubmanager
 from .meta import MetaInfoSubmanager
 from .extras import ExtrasInfoSubmanager
 from .hw import HwInfoSubmanager
+from .fan import FanInfoSubmanager
 
 
 # =====
@@ -36,9 +38,11 @@ class InfoManager:
     def __init__(self, config: Section) -> None:
         self.__subs = {
             "system": SystemInfoSubmanager(config.kvmd.streamer.cmd),
+            "auth": AuthInfoSubmanager(config.kvmd.auth.enabled),
             "meta": MetaInfoSubmanager(config.kvmd.info.meta),
             "extras": ExtrasInfoSubmanager(config),
             "hw": HwInfoSubmanager(**config.kvmd.info.hw._unpack()),
+            "fan": FanInfoSubmanager(**config.kvmd.info.fan._unpack()),
         }
 
     def get_subs(self) -> Set[str]:
