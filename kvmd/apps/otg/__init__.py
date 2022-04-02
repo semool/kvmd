@@ -38,7 +38,6 @@ from ...yamlconf import Section
 
 from ...validators import ValidatorError
 
-from ... import env
 from ... import usb
 
 from .. import init
@@ -106,9 +105,9 @@ def _check_config(config: Section) -> None:
 
 # =====
 class _GadgetConfig:
-    def __init__(self, gadget_path: str, config_path: str, meta_path: str) -> None:
+    def __init__(self, gadget_path: str, profile_path: str, meta_path: str) -> None:
         self.__gadget_path = gadget_path
-        self.__config_path = config_path
+        self.__profile_path = profile_path
         self.__meta_path = meta_path
         self.__hid_instance = 0
         self.__msd_instance = 0
@@ -118,7 +117,7 @@ class _GadgetConfig:
         func = "acm.usb0"
         func_path = join(self.__gadget_path, "functions", func)
         _mkdir(func_path)
-        _symlink(func_path, join(self.__config_path, func))
+        _symlink(func_path, join(self.__profile_path, func))
         self.__create_meta(func, "Serial Port")
 
     def add_ethernet(self, driver: str, host_mac: str, kvm_mac: str) -> None:
@@ -147,8 +146,8 @@ class _GadgetConfig:
                 # a Microsoft-specific extension of USB.
                 _write(join(func_path, "os_desc/interface.rndis/compatible_id"), "RNDIS")
                 _write(join(func_path, "os_desc/interface.rndis/sub_compatible_id"), "5162001")
-            _symlink(self.__config_path, join(self.__gadget_path, "os_desc/c.1"))
-        _symlink(func_path, join(self.__config_path, func))
+            _symlink(self.__profile_path, join(self.__gadget_path, "os_desc", usb.G_PROFILE_NAME))
+        _symlink(func_path, join(self.__profile_path, func))
         self.__create_meta(func, "Ethernet")
 
     def add_keyboard(self, remote_wakeup: bool) -> None:
@@ -169,7 +168,7 @@ class _GadgetConfig:
         _write(join(func_path, "subclass"), str(hid.subclass))
         _write(join(func_path, "report_length"), str(hid.report_length))
         _write_bytes(join(func_path, "report_desc"), hid.report_descriptor)
-        _symlink(func_path, join(self.__config_path, func))
+        _symlink(func_path, join(self.__profile_path, func))
         self.__create_meta(func, name)
         self.__hid_instance += 1
 
@@ -186,7 +185,7 @@ class _GadgetConfig:
             _chown(join(func_path, "lun.0/cdrom"), user)
             _chown(join(func_path, "lun.0/ro"), user)
             _chown(join(func_path, "lun.0/file"), user)
-        _symlink(func_path, join(self.__config_path, func))
+        _symlink(func_path, join(self.__profile_path, func))
         name = ("Mass Storage Drive" if self.__msd_instance == 0 else f"Extra Drive #{self.__msd_instance}")
         self.__create_meta(func, name)
         self.__msd_instance += 1
@@ -207,7 +206,7 @@ def _cmd_start(config: Section) -> None:  # pylint: disable=too-many-statements
     logger.info("Using UDC %s", udc)
 
     logger.info("Creating gadget %r ...", config.otg.gadget)
-    gadget_path = join(f"{env.SYSFS_PREFIX}/sys/kernel/config/usb_gadget", config.otg.gadget)
+    gadget_path = usb.get_gadget_path(config.otg.gadget)
     _mkdir(gadget_path)
 
     _write(join(gadget_path, "idVendor"), f"0x{config.otg.vendor_id:04X}")
@@ -229,16 +228,16 @@ def _cmd_start(config: Section) -> None:  # pylint: disable=too-many-statements
     _write(join(lang_path, "product"), config.otg.product)
     _write(join(lang_path, "serialnumber"), config.otg.serial)
 
-    config_path = join(gadget_path, "configs/c.1")
-    _mkdir(config_path)
-    _mkdir(join(config_path, "strings/0x409"))
-    _write(join(config_path, "strings/0x409/configuration"), f"Config 1: {config.otg.config}")
-    _write(join(config_path, "MaxPower"), "250")
+    profile_path = join(gadget_path, usb.G_PROFILE)
+    _mkdir(profile_path)
+    _mkdir(join(profile_path, "strings/0x409"))
+    _write(join(profile_path, "strings/0x409/configuration"), f"Config 1: {config.otg.config}")
+    _write(join(profile_path, "MaxPower"), "250")
     if config.otg.remote_wakeup:
         # XXX: Should we use MaxPower=100 with Remote Wakeup?
-        _write(join(config_path, "bmAttributes"), "0xA0")
+        _write(join(profile_path, "bmAttributes"), "0xA0")
 
-    gc = _GadgetConfig(gadget_path, config_path, config.otg.meta)
+    gc = _GadgetConfig(gadget_path, profile_path, config.otg.meta)
 
     if config.otg.devices.serial.enabled:
         logger.info("===== Serial =====")
@@ -285,19 +284,19 @@ def _cmd_stop(config: Section) -> None:
 
     _check_config(config)
 
-    gadget_path = join(f"{env.SYSFS_PREFIX}/sys/kernel/config/usb_gadget", config.otg.gadget)
+    gadget_path = usb.get_gadget_path(config.otg.gadget)
 
     logger.info("Disabling gadget %r ...", config.otg.gadget)
     _write(join(gadget_path, "UDC"), "\n")
 
-    _unlink(join(gadget_path, "os_desc/c.1"), True)
+    _unlink(join(gadget_path, "os_desc", usb.G_PROFILE_NAME), True)
 
-    config_path = join(gadget_path, "configs/c.1")
-    for func in os.listdir(config_path):
+    profile_path = join(gadget_path, usb.G_PROFILE)
+    for func in os.listdir(profile_path):
         if re.search(r"\.usb\d+$", func):
-            _unlink(join(config_path, func))
-    _rmdir(join(config_path, "strings/0x409"))
-    _rmdir(config_path)
+            _unlink(join(profile_path, func))
+    _rmdir(join(profile_path, "strings/0x409"))
+    _rmdir(profile_path)
 
     funcs_path = join(gadget_path, "functions")
     for func in os.listdir(funcs_path):

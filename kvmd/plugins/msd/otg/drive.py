@@ -23,7 +23,9 @@
 import os
 import errno
 
-from .... import env
+from typing import List
+
+from .... import usb
 
 from .. import MsdOperationError
 
@@ -37,14 +39,16 @@ class MsdDriveLockedError(MsdOperationError):
 # =====
 class Drive:
     def __init__(self, gadget: str, instance: int, lun: int) -> None:
-        self.__path = os.path.join(
-            f"{env.SYSFS_PREFIX}/sys/kernel/config/usb_gadget",
-            gadget,
-            f"functions/mass_storage.usb{instance}/lun.{lun}",
-        )
+        func = f"mass_storage.usb{instance}"
+        self.__profile_func_path = usb.get_gadget_path(gadget, usb.G_PROFILE, func)
+        self.__profile_path = usb.get_gadget_path(gadget, usb.G_PROFILE)
+        self.__lun_path = usb.get_gadget_path(gadget, usb.G_FUNCTIONS, func, f"lun.{lun}")
 
-    def get_sysfs_path(self) -> str:
-        return self.__path
+    def is_enabled(self) -> bool:
+        return os.path.exists(self.__profile_func_path)
+
+    def get_watchable_paths(self) -> List[str]:
+        return [self.__lun_path, self.__profile_path]
 
     # =====
 
@@ -69,12 +73,12 @@ class Drive:
     # =====
 
     def __get_param(self, param: str) -> str:
-        with open(os.path.join(self.__path, param)) as param_file:
+        with open(os.path.join(self.__lun_path, param)) as param_file:
             return param_file.read().strip()
 
     def __set_param(self, param: str, value: str) -> None:
         try:
-            with open(os.path.join(self.__path, param), "w") as param_file:
+            with open(os.path.join(self.__lun_path, param), "w") as param_file:
                 param_file.write(value + "\n")
         except OSError as err:
             if err.errno == errno.EBUSY:
