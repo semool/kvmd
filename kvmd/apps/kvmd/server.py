@@ -45,8 +45,20 @@ from ...logging import get_logger
 from ...errors import OperationError
 from ...errors import IsBusyError
 
-from ...plugins import BasePlugin
+from ... import aiotools
+from ... import aioproc
 
+from ...htserver import HttpError
+from ...htserver import HttpExposed
+from ...htserver import exposed_http
+from ...htserver import exposed_ws
+from ...htserver import get_exposed_http
+from ...htserver import get_exposed_ws
+from ...htserver import make_json_response
+from ...htserver import make_json_exception
+from ...htserver import HttpServer
+
+from ...plugins import BasePlugin
 from ...plugins.hid import BaseHid
 from ...plugins.atx import BaseAtx
 from ...plugins.msd import BaseMsd
@@ -59,9 +71,6 @@ from ...validators.kvm import valid_stream_resolution
 from ...validators.kvm import valid_stream_h264_bitrate
 from ...validators.kvm import valid_stream_h264_gop
 
-from ... import aiotools
-from ... import aioproc
-
 from .auth import AuthManager
 from .info import InfoManager
 from .logreader import LogReader
@@ -69,16 +78,6 @@ from .ugpio import UserGpio
 from .streamer import Streamer
 from .snapshoter import Snapshoter
 from .tesseract import TesseractOcr
-
-from .http import HttpError
-from .http import HttpExposed
-from .http import exposed_http
-from .http import exposed_ws
-from .http import get_exposed_http
-from .http import get_exposed_ws
-from .http import make_json_response
-from .http import make_json_exception
-from .http import HttpServer
 
 from .api.auth import AuthApi
 from .api.auth import check_request_auth
@@ -320,15 +319,7 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
         aioproc.rename_process("main")
         super().run(**kwargs)
 
-    async def _make_app(self) -> aiohttp.web.Application:
-        app = aiohttp.web.Application(middlewares=[aiohttp.web.normalize_path_middleware(
-            append_slash=False,
-            remove_slash=True,
-            merge_slashes=True,
-        )])
-        app.on_shutdown.append(self.__on_shutdown)
-        app.on_cleanup.append(self.__on_cleanup)
-
+    async def _init_app(self, app: aiohttp.web.Application) -> None:
         self.__run_system_task(self.__stream_controller)
         for comp in self.__components:
             if comp.systask:
@@ -342,8 +333,6 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
                 self.__add_app_route(app, http_exposed)
             for ws_exposed in get_exposed_ws(api):
                 self.__ws_handlers[ws_exposed.event_type] = ws_exposed.handler
-
-        return app
 
     def __run_system_task(self, method: Callable, *args: Any) -> None:
         async def wrapper() -> None:
@@ -371,7 +360,7 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
                 return make_json_exception(err)
         app.router.add_route(exposed.method, exposed.path, wrapper)
 
-    async def __on_shutdown(self, _: aiohttp.web.Application) -> None:
+    async def _on_shutdown(self, _: aiohttp.web.Application) -> None:
         logger = get_logger(0)
 
         logger.info("Waiting short tasks ...")
@@ -390,7 +379,7 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
 
         logger.info("On-Shutdown complete")
 
-    async def __on_cleanup(self, _: aiohttp.web.Application) -> None:
+    async def _on_cleanup(self, _: aiohttp.web.Application) -> None:
         logger = get_logger(0)
         for comp in self.__components:
             if comp.cleanup:
