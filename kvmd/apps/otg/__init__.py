@@ -31,6 +31,7 @@ from os.path import join  # pylint: disable=ungrouped-imports
 
 from typing import List
 from typing import Optional
+from typing import Union
 
 from ...logging import get_logger
 
@@ -71,20 +72,16 @@ def _rmdir(path: str) -> None:
 def _unlink(path: str, optional: bool=False) -> None:
     logger = get_logger()
     if optional and not os.access(path, os.F_OK):
-        logger.info("SKIP-RM - %s", path)
+        logger.info("RM ------ [SKIPPED] %s", path)
         return
     logger.info("RM ------ %s", path)
     os.unlink(path)
 
 
-def _write(path: str, text: str, optional: bool=False) -> None:
-    logger = get_logger()
-    if optional and not os.access(path, os.F_OK):
-        logger.info("SKIP ---- %s", path)
-        return
-    logger.info("WRITE --- %s", path)
+def _write(path: str, value: Union[str, int]) -> None:
+    get_logger().info("WRITE --- %s", path)
     with open(path, "w") as param_file:
-        param_file.write(text)
+        param_file.write(str(value))
 
 
 def _write_bytes(path: str, data: bytes) -> None:
@@ -161,12 +158,12 @@ class _GadgetConfig:
         func = f"hid.usb{self.__hid_instance}"
         func_path = join(self.__gadget_path, "functions", func)
         _mkdir(func_path)
-        _write(join(func_path, "no_out_endpoint"), "1", optional=True)
+        _write(join(func_path, "no_out_endpoint"), "1")
         if remote_wakeup:
-            _write(join(func_path, "wakeup_on_write"), "1", optional=True)
-        _write(join(func_path, "protocol"), str(hid.protocol))
-        _write(join(func_path, "subclass"), str(hid.subclass))
-        _write(join(func_path, "report_length"), str(hid.report_length))
+            _write(join(func_path, "wakeup_on_write"), "1")
+        _write(join(func_path, "protocol"), hid.protocol)
+        _write(join(func_path, "subclass"), hid.subclass)
+        _write(join(func_path, "report_length"), hid.report_length)
         _write_bytes(join(func_path, "report_desc"), hid.report_descriptor)
         _symlink(func_path, join(self.__profile_path, func))
         self.__create_meta(func, name)
@@ -176,15 +173,16 @@ class _GadgetConfig:
         func = f"mass_storage.usb{self.__msd_instance}"
         func_path = join(self.__gadget_path, "functions", func)
         _mkdir(func_path)
-        _write(join(func_path, "stall"), str(int(stall)))
-        _write(join(func_path, "lun.0/cdrom"), str(int(cdrom)))
-        _write(join(func_path, "lun.0/ro"), str(int(not rw)))
-        _write(join(func_path, "lun.0/removable"), str(int(removable)))
-        _write(join(func_path, "lun.0/nofua"), str(int(not fua)))
+        _write(join(func_path, "stall"), int(stall))
+        _write(join(func_path, "lun.0/cdrom"), int(cdrom))
+        _write(join(func_path, "lun.0/ro"), int(not rw))
+        _write(join(func_path, "lun.0/removable"), int(removable))
+        _write(join(func_path, "lun.0/nofua"), int(not fua))
         if user != "root":
             _chown(join(func_path, "lun.0/cdrom"), user)
             _chown(join(func_path, "lun.0/ro"), user)
             _chown(join(func_path, "lun.0/file"), user)
+            _chown(join(func_path, "lun.0/forced_eject"), user)
         _symlink(func_path, join(self.__profile_path, func))
         name = ("Mass Storage Drive" if self.__msd_instance == 0 else f"Extra Drive #{self.__msd_instance}")
         self.__create_meta(func, name)
@@ -194,7 +192,7 @@ class _GadgetConfig:
         _write(join(self.__meta_path, f"{func}@meta.json"), json.dumps({"func": func, "name": name}))
 
 
-def _cmd_start(config: Section) -> None:  # pylint: disable=too-many-statements
+def _cmd_start(config: Section) -> None:  # pylint: disable=too-many-statements,too-many-branches
     # https://www.kernel.org/doc/Documentation/usb/gadget_configfs.txt
     # https://www.isticktoit.net/?p=1383
 
@@ -211,28 +209,33 @@ def _cmd_start(config: Section) -> None:  # pylint: disable=too-many-statements
 
     _write(join(gadget_path, "idVendor"), f"0x{config.otg.vendor_id:04X}")
     _write(join(gadget_path, "idProduct"), f"0x{config.otg.product_id:04X}")
+    _write(join(gadget_path, "bcdUSB"), f"0x{config.otg.usb_version:04X}")
+
     # bcdDevice should be incremented any time there are breaking changes
     # to this script so that the host OS sees it as a new device
     # and re-enumerates everything rather than relying on cached values.
-    if config.otg.devices.ethernet.enabled and config.otg.devices.ethernet.driver == "ncm":
-        _write(join(gadget_path, "bcdDevice"), "0x0102")
-    elif config.otg.devices.ethernet.enabled and config.otg.devices.ethernet.driver == "rndis":
-        _write(join(gadget_path, "bcdDevice"), "0x0101")
-    else:
-        _write(join(gadget_path, "bcdDevice"), "0x0100")
-    _write(join(gadget_path, "bcdUSB"), f"0x{config.otg.usb_version:04X}")
+    device_version = config.otg.device_version
+    if device_version < 0:
+        device_version = 0x0100
+        if config.otg.devices.ethernet.enabled:
+            if config.otg.devices.ethernet.driver == "ncm":
+                device_version = 0x0102
+            elif config.otg.devices.ethernet.driver == "rndis":
+                device_version = 0x0101
+    _write(join(gadget_path, "bcdDevice"), f"0x{device_version:04X}")
 
     lang_path = join(gadget_path, "strings/0x409")
     _mkdir(lang_path)
     _write(join(lang_path, "manufacturer"), config.otg.manufacturer)
     _write(join(lang_path, "product"), config.otg.product)
-    _write(join(lang_path, "serialnumber"), config.otg.serial)
+    if config.otg.serial is not None:
+        _write(join(lang_path, "serialnumber"), config.otg.serial)
 
     profile_path = join(gadget_path, usb.G_PROFILE)
     _mkdir(profile_path)
     _mkdir(join(profile_path, "strings/0x409"))
     _write(join(profile_path, "strings/0x409/configuration"), f"Config 1: {config.otg.config}")
-    _write(join(profile_path, "MaxPower"), "250")
+    _write(join(profile_path, "MaxPower"), config.otg.max_power)
     if config.otg.remote_wakeup:
         # XXX: Should we use MaxPower=100 with Remote Wakeup?
         _write(join(profile_path, "bmAttributes"), "0xA0")
@@ -269,8 +272,6 @@ def _cmd_start(config: Section) -> None:  # pylint: disable=too-many-statements
     logger.info("Enabling the gadget ...")
     _write(join(gadget_path, "UDC"), udc)
     time.sleep(config.otg.init_delay)
-
-    logger.info("Setting up permissions ...")
     _chown(join(gadget_path, "UDC"), config.otg.user)
     _chown(profile_path, config.otg.user)
 
@@ -290,7 +291,7 @@ def _cmd_stop(config: Section) -> None:
     logger.info("Disabling gadget %r ...", config.otg.gadget)
     _write(join(gadget_path, "UDC"), "\n")
 
-    _unlink(join(gadget_path, "os_desc", usb.G_PROFILE_NAME), True)
+    _unlink(join(gadget_path, "os_desc", usb.G_PROFILE_NAME), optional=True)
 
     profile_path = join(gadget_path, usb.G_PROFILE)
     for func in os.listdir(profile_path):

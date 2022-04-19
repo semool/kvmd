@@ -66,7 +66,7 @@ def main() -> None:
 
     setup(
         name="kvmd",
-        version="3.80",
+        version="3.84",
         url="https://github.com/pikvm/kvmd",
         license="GPLv3",
         author="Maxim Devaev",
@@ -108,7 +108,6 @@ def main() -> None:
             "kvmd.apps.janus",
             "kvmd.apps.watchdog",
             "kvmd.helpers",
-            "kvmd.helpers.unlock",
             "kvmd.helpers.remount",
         ],
 
@@ -129,7 +128,6 @@ def main() -> None:
                 "kvmd-vnc = kvmd.apps.vnc:main",
                 "kvmd-janus = kvmd.apps.janus:main",
                 "kvmd-watchdog = kvmd.apps.watchdog:main",
-                "kvmd-helper-otgmsd-unlock = kvmd.helpers.unlock:main",
                 "kvmd-helper-otgmsd-remount = kvmd.helpers.remount:main",
                 "kvmd-helper-pst-remount = kvmd.helpers.remount:main",
             ],

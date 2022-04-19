@@ -20,45 +20,50 @@
 # ========================================================================== #
 
 
-from typing import List
+import asyncio
+
 from typing import Dict
 from typing import Set
 from typing import Callable
+from typing import Optional
 from typing import Any
 
-from ...logging import get_logger
+import gpiod
 
-from ... import tools
 from ... import aiotools
-from ... import aioproc
 
 from ...yamlconf import Option
 
-from ...validators.os import valid_command
+from ...validators.os import valid_abs_path
+from ...validators.hw import valid_gpio_pin
 
-from . import GpioDriverOfflineError
 from . import UserGpioModes
 from . import BaseUserGpioDriver
 
 
 # =====
-class Plugin(BaseUserGpioDriver):  # pylint: disable=too-many-instance-attributes
-    def __init__(  # pylint: disable=super-init-not-called
+class Plugin(BaseUserGpioDriver):
+    def __init__(
         self,
         instance_name: str,
         notifier: aiotools.AioNotifier,
 
-        cmd: List[str],
+        device_path: str,
     ) -> None:
 
         super().__init__(instance_name, notifier)
 
-        self.__cmd = cmd
+        self.__device_path = device_path
+
+        self.__tasks: Dict[int, Optional[asyncio.Task]] = {}
+
+        self.__chip: Optional[gpiod.Chip] = None
+        self.__lines: Dict[int, gpiod.Line] = {}
 
     @classmethod
     def get_plugin_options(cls) -> Dict:
         return {
-            "cmd": Option([], type=valid_command),
+            "device": Option("/dev/gpiochip0", type=valid_abs_path, unpack_as="device_path"),
         }
 
     @classmethod
@@ -67,26 +72,61 @@ class Plugin(BaseUserGpioDriver):  # pylint: disable=too-many-instance-attribute
 
     @classmethod
     def get_pin_validator(cls) -> Callable[[Any], Any]:
-        return str
+        return valid_gpio_pin
+
+    def register_output(self, pin: str, initial: Optional[bool]) -> None:
+        _ = initial
+        self.__tasks[int(pin)] = None
+
+    def prepare(self) -> None:
+        self.__chip = gpiod.Chip(self.__device_path)
+        for pin in self.__tasks:
+            line = self.__chip.get_line(pin)
+            line.request("kvmd::locator::outputs", gpiod.LINE_REQ_DIR_OUT, default_vals=[0])
+            self.__lines[pin] = line
+
+    async def cleanup(self) -> None:
+        tasks = [
+            task
+            for task in self.__tasks.values()
+            if task is not None
+        ]
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        if self.__chip:
+            try:
+                self.__chip.close()
+            except Exception:
+                pass
 
     async def read(self, pin: str) -> bool:
-        _ = pin
-        return False
+        return (self.__tasks[int(pin)] is not None)
 
     async def write(self, pin: str, state: bool) -> None:
-        _ = pin
-        if not state:
-            return
+        pin_int = int(pin)
+        task = self.__tasks[pin_int]
+        if state and task is None:
+            self.__tasks[pin_int] = asyncio.create_task(self.__blink(pin_int))
+        elif not state and task is not None:
+            task.cancel()
+            await task
+            self.__tasks[pin_int] = None
 
+    async def __blink(self, pin: int) -> None:
+        line = self.__lines[pin]
         try:
-            proc = await aioproc.log_process(self.__cmd, logger=get_logger(0), prefix=str(self))
-            if proc.returncode != 0:
-                raise RuntimeError(f"Custom command error: retcode={proc.returncode}")
-        except Exception as err:
-            get_logger(0).error("Can't run custom command %s: %s", self.__cmd, tools.efmt(err))
-            raise GpioDriverOfflineError(self)
+            state = 1
+            while True:
+                line.set_value(state)
+                state = int(not state)
+                await asyncio.sleep(0.1)
+        except asyncio.CancelledError:
+            pass
+        finally:
+            line.set_value(0)
 
     def __str__(self) -> str:
-        return f"CMD({self._instance_name})"
+        return f"Locator({self._instance_name})"
 
     __repr__ = __str__

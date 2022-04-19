@@ -27,6 +27,7 @@ import dataclasses
 import inspect
 import json
 
+from typing import Tuple
 from typing import List
 from typing import Dict
 from typing import Callable
@@ -36,6 +37,8 @@ from aiohttp.web import BaseRequest
 from aiohttp.web import Request
 from aiohttp.web import Response
 from aiohttp.web import StreamResponse
+from aiohttp.web import WebSocketResponse
+from aiohttp.web import WSMsgType
 from aiohttp.web import Application
 from aiohttp.web import run_app
 from aiohttp.web import normalize_path_middleware
@@ -46,6 +49,11 @@ except ImportError:
     from aiohttp.helpers import AccessLogger  # type: ignore
 
 from .logging import get_logger
+
+from .errors import OperationError
+from .errors import IsBusyError
+
+from .validators import ValidatorError
 
 
 # =====
@@ -198,6 +206,57 @@ async def stream_json_exception(response: StreamResponse, err: Exception) -> Non
 
 
 # =====
+async def send_ws_event(ws: WebSocketResponse, event_type: str, event: Optional[Dict]) -> None:
+    await ws.send_str(json.dumps({
+        "event_type": event_type,
+        "event": event,
+    }))
+
+
+async def broadcast_ws_event(wss: List[WebSocketResponse], event_type: str, event: Optional[Dict]) -> None:
+    if wss:
+        await asyncio.gather(*[
+            send_ws_event(ws, event_type, event)
+            for ws in wss
+            if (
+                not ws.closed
+                and ws._req is not None  # pylint: disable=protected-access
+                and ws._req.transport is not None  # pylint: disable=protected-access
+            )
+        ], return_exceptions=True)
+
+
+def _parse_ws_event(msg: str) -> Tuple[str, Dict]:
+    data = json.loads(msg)
+    if not isinstance(data, dict):
+        raise RuntimeError("Top-level event structure is not a dict")
+    event_type = data.get("event_type")
+    if not isinstance(event_type, str):
+        raise RuntimeError("event_type must be a string")
+    event = data["event"]
+    if not isinstance(event, dict):
+        raise RuntimeError("event must be a dict")
+    return (event_type, event)
+
+
+async def process_ws_messages(ws: WebSocketResponse, handlers: Dict[str, Callable]) -> None:
+    logger = get_logger(1)
+    async for msg in ws:
+        if msg.type != WSMsgType.TEXT:
+            break
+        try:
+            (event_type, event) = _parse_ws_event(msg.data)
+        except Exception as err:
+            logger.error("Can't parse JSON event from websocket: %r", err)
+        else:
+            handler = handlers.get(event_type)
+            if handler:
+                await handler(ws, event)
+            else:
+                logger.error("Unknown websocket event: %r", msg.data)
+
+
+# =====
 _REQUEST_AUTH_INFO = "_kvmd_auth_info"
 
 
@@ -219,8 +278,11 @@ class HttpServer:
         unix_path: str,
         unix_rm: bool,
         unix_mode: int,
+        heartbeat: float,
         access_log_format: str,
     ) -> None:
+
+        self.__heartbeat = heartbeat  # pylint: disable=attribute-defined-outside-init
 
         if unix_rm and os.path.exists(unix_path):
             os.remove(unix_path)
@@ -238,25 +300,59 @@ class HttpServer:
             loop=asyncio.get_event_loop(),
         )
 
-    async def _init_app(self, app: Application) -> None:
+    # =====
+
+    def _add_exposed(self, exposed: HttpExposed) -> None:
+        async def wrapper(request: Request) -> Response:
+            try:
+                await self._check_request_auth(exposed, request)
+                return (await exposed.handler(request))
+            except IsBusyError as err:
+                return make_json_exception(err, 409)
+            except (ValidatorError, OperationError) as err:
+                return make_json_exception(err, 400)
+            except HttpError as err:
+                return make_json_exception(err)
+        self.__app.router.add_route(exposed.method, exposed.path, wrapper)
+
+    async def _make_ws_response(self, request: Request) -> WebSocketResponse:
+        ws = WebSocketResponse(heartbeat=self.__heartbeat)
+        await ws.prepare(request)
+        return ws
+
+    # =====
+
+    async def _check_request_auth(self, exposed: HttpExposed, request: Request) -> None:
+        pass
+
+    async def _init_app(self) -> None:
         raise NotImplementedError
 
-    async def _on_shutdown(self, app: Application) -> None:
-        _ = app
+    async def _on_shutdown(self) -> None:
+        pass
 
-    async def _on_cleanup(self, app: Application) -> None:
-        _ = app
+    async def _on_cleanup(self) -> None:
+        pass
+
+    # =====
 
     async def __make_app(self) -> Application:
-        app = Application(middlewares=[normalize_path_middleware(
+        self.__app = Application(middlewares=[normalize_path_middleware(  # pylint: disable=attribute-defined-outside-init
             append_slash=False,
             remove_slash=True,
             merge_slashes=True,
         )])
-        app.on_shutdown.append(self._on_shutdown)
-        app.on_cleanup.append(self._on_cleanup)
-        await self._init_app(app)
-        return app
+
+        async def on_shutdown(_: Application) -> None:
+            await self._on_shutdown()
+        self.__app.on_shutdown.append(on_shutdown)
+
+        async def on_cleanup(_: Application) -> None:
+            await self._on_cleanup()
+        self.__app.on_cleanup.append(on_cleanup)
+
+        await self._init_app()
+        return self.__app
 
     def __run_app_print(self, text: str) -> None:
         logger = get_logger(0)

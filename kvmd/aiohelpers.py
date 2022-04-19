@@ -20,39 +20,31 @@
 # ========================================================================== #
 
 
-import sys
-import signal
+import subprocess
 
-import psutil
+from typing import List
 
+from .logging import get_logger
 
-# =====
-_PROCESS_NAME = "file-storage"
-
-
-# =====
-def _log(msg: str) -> None:
-    print(msg, file=sys.stderr)
-
-
-def _unlock() -> None:
-    # https://github.com/torvalds/linux/blob/3039fad/drivers/usb/gadget/function/f_mass_storage.c#L2924
-    found = False
-    for proc in psutil.process_iter():
-        attrs = proc.as_dict(attrs=["name", "exe", "pid"])
-        if attrs.get("name") == _PROCESS_NAME and not attrs.get("exe"):
-            _log(f"Sending SIGUSR1 to MSD {_PROCESS_NAME!r} kernel thread with pid={attrs['pid']} ...")
-            try:
-                proc.send_signal(signal.SIGUSR1)
-                found = True
-            except Exception as err:
-                raise SystemExit(f"Can't send SIGUSR1 to MSD kernel thread with pid={attrs['pid']}: {err}")
-    if not found:
-        raise SystemExit(f"Can't find MSD kernel thread {_PROCESS_NAME!r}")
+from . import tools
+from . import aioproc
 
 
 # =====
-def main() -> None:
-    if len(sys.argv) != 2 or sys.argv[1] != "unlock":
-        raise SystemExit(f"Usage: {sys.argv[0]} [unlock]")
-    _unlock()
+async def remount(name: str, base_cmd: List[str], rw: bool) -> bool:
+    logger = get_logger(1)
+    mode = ("rw" if rw else "ro")
+    cmd = [
+        part.format(mode=mode)
+        for part in base_cmd
+    ]
+    logger.info("Remounting %s storage to %s: %s ...", name, mode.upper(), cmd)
+    try:
+        proc = await aioproc.log_process(cmd, logger)
+        if proc.returncode != 0:
+            assert proc.returncode is not None
+            raise subprocess.CalledProcessError(proc.returncode, cmd)
+    except Exception as err:
+        logger.error("Can't remount %s storage: %s", name, tools.efmt(err))
+        return False
+    return True

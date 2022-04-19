@@ -25,7 +25,6 @@ import signal
 import asyncio
 import operator
 import dataclasses
-import json
 
 from typing import Tuple
 from typing import List
@@ -37,25 +36,26 @@ from typing import AsyncGenerator
 from typing import Optional
 from typing import Any
 
-import aiohttp
-import aiohttp.web
+from aiohttp.web import Request
+from aiohttp.web import Response
+from aiohttp.web import WebSocketResponse
 
 from ...logging import get_logger
 
 from ...errors import OperationError
-from ...errors import IsBusyError
 
 from ... import aiotools
 from ... import aioproc
 
-from ...htserver import HttpError
 from ...htserver import HttpExposed
 from ...htserver import exposed_http
 from ...htserver import exposed_ws
 from ...htserver import get_exposed_http
 from ...htserver import get_exposed_ws
 from ...htserver import make_json_response
-from ...htserver import make_json_exception
+from ...htserver import send_ws_event
+from ...htserver import broadcast_ws_event
+from ...htserver import process_ws_messages
 from ...htserver import HttpServer
 
 from ...plugins import BasePlugin
@@ -63,7 +63,6 @@ from ...plugins.hid import BaseHid
 from ...plugins.atx import BaseAtx
 from ...plugins.msd import BaseMsd
 
-from ...validators import ValidatorError
 from ...validators.basic import valid_bool
 from ...validators.kvm import valid_stream_quality
 from ...validators.kvm import valid_stream_fps
@@ -133,7 +132,7 @@ class _Component:  # pylint: disable=too-many-instance-attributes
 
 @dataclasses.dataclass(frozen=True)
 class _WsClient:
-    ws: aiohttp.web.WebSocketResponse
+    ws: WebSocketResponse
     stream: bool
 
     def __str__(self) -> str:
@@ -155,8 +154,6 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
         streamer: Streamer,
         snapshoter: Snapshoter,
 
-        heartbeat: float,
-
         keymap_path: str,
         ignore_keys: List[str],
         mouse_x_range: Tuple[int, int],
@@ -170,8 +167,6 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
         self.__streamer = streamer
         self.__snapshoter = snapshoter  # Not a component: No state or cleanup
         self.__user_gpio = user_gpio  # Has extra state "gpio_scheme_state"
-
-        self.__heartbeat = heartbeat
 
         self.__stream_forever = stream_forever
 
@@ -222,7 +217,7 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
     # ===== STREAMER CONTROLLER
 
     @exposed_http("POST", "/streamer/set_params")
-    async def __streamer_set_params_handler(self, request: aiohttp.web.Request) -> aiohttp.web.Response:
+    async def __streamer_set_params_handler(self, request: Request) -> Response:
         current_params = self.__streamer.get_params()
         for (name, validator, exc_cls) in [
             ("quality", valid_stream_quality, StreamerQualityNotSupported),
@@ -243,7 +238,7 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
         return make_json_response()
 
     @exposed_http("POST", "/streamer/reset")
-    async def __streamer_reset_handler(self, _: aiohttp.web.Request) -> aiohttp.web.Response:
+    async def __streamer_reset_handler(self, _: Request) -> Response:
         self.__reset_streamer = True
         await self.__streamer_notifier.notify()
         return make_json_response()
@@ -251,14 +246,10 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
     # ===== WEBSOCKET
 
     @exposed_http("GET", "/ws")
-    async def __ws_handler(self, request: aiohttp.web.Request) -> aiohttp.web.WebSocketResponse:
-        logger = get_logger(0)
-
-        client = _WsClient(
-            ws=aiohttp.web.WebSocketResponse(heartbeat=self.__heartbeat),
-            stream=valid_bool(request.query.get("stream", "true")),
-        )
-        await client.ws.prepare(request)
+    async def __ws_handler(self, request: Request) -> WebSocketResponse:
+        stream = valid_bool(request.query.get("stream", "true"))
+        ws = await self._make_ws_response(request)
+        client = _WsClient(ws, stream)
         await self.__register_ws_client(client)
 
         try:
@@ -279,36 +270,19 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
             ))
             for stage in [stage1, stage2]:
                 await asyncio.gather(*[
-                    self.__send_event(client.ws, event_type, events.pop(event_type))
+                    send_ws_event(ws, event_type, events.pop(event_type))
                     for (event_type, _) in stage
                 ])
 
-            await self.__send_event(client.ws, "loop", {})
-
-            async for msg in client.ws:
-                if msg.type == aiohttp.web.WSMsgType.TEXT:
-                    try:
-                        data = json.loads(msg.data)
-                        event_type = data.get("event_type")
-                        event = data["event"]
-                    except Exception as err:
-                        logger.error("Can't parse JSON event from websocket: %r", err)
-                    else:
-                        handler = self.__ws_handlers.get(event_type)
-                        if handler:
-                            await handler(client.ws, event)
-                        else:
-                            logger.error("Unknown websocket event: %r", data)
-                else:
-                    break
-
-            return client.ws
+            await send_ws_event(ws, "loop", {})
+            await process_ws_messages(ws, self.__ws_handlers)
+            return ws
         finally:
             await self.__remove_ws_client(client)
 
     @exposed_ws("ping")
-    async def __ws_ping_handler(self, ws: aiohttp.web.WebSocketResponse, _: Dict) -> None:
-        await self.__send_event(ws, "pong", {})
+    async def __ws_ping_handler(self, ws: WebSocketResponse, _: Dict) -> None:
+        await send_ws_event(ws, "pong", {})
 
     # ===== SYSTEM STUFF
 
@@ -319,7 +293,10 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
         aioproc.rename_process("main")
         super().run(**kwargs)
 
-    async def _init_app(self, app: aiohttp.web.Application) -> None:
+    async def _check_request_auth(self, exposed: HttpExposed, request: Request) -> None:
+        await check_request_auth(self.__auth_manager, exposed, request)
+
+    async def _init_app(self) -> None:
         self.__run_system_task(self.__stream_controller)
         for comp in self.__components:
             if comp.systask:
@@ -330,7 +307,7 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
 
         for api in self.__apis:
             for http_exposed in get_exposed_http(api):
-                self.__add_app_route(app, http_exposed)
+                self._add_exposed(http_exposed)
             for ws_exposed in get_exposed_ws(api):
                 self.__ws_handlers[ws_exposed.event_type] = ws_exposed.handler
 
@@ -347,20 +324,7 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
                 os.kill(os.getpid(), signal.SIGTERM)
         self.__system_tasks.append(asyncio.create_task(wrapper()))
 
-    def __add_app_route(self, app: aiohttp.web.Application, exposed: HttpExposed) -> None:
-        async def wrapper(request: aiohttp.web.Request) -> aiohttp.web.Response:
-            try:
-                await check_request_auth(self.__auth_manager, exposed, request)
-                return (await exposed.handler(request))
-            except IsBusyError as err:
-                return make_json_exception(err, 409)
-            except (ValidatorError, OperationError) as err:
-                return make_json_exception(err, 400)
-            except HttpError as err:
-                return make_json_exception(err)
-        app.router.add_route(exposed.method, exposed.path, wrapper)
-
-    async def _on_shutdown(self, _: aiohttp.web.Application) -> None:
+    async def _on_shutdown(self) -> None:
         logger = get_logger(0)
 
         logger.info("Waiting short tasks ...")
@@ -379,7 +343,7 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
 
         logger.info("On-Shutdown complete")
 
-    async def _on_cleanup(self, _: aiohttp.web.Application) -> None:
+    async def _on_cleanup(self) -> None:
         logger = get_logger(0)
         for comp in self.__components:
             if comp.cleanup:
@@ -389,24 +353,6 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
                 except Exception:
                     logger.exception("Cleanup error on %s", comp.name)
         logger.info("On-Cleanup complete")
-
-    async def __send_event(self, ws: aiohttp.web.WebSocketResponse, event_type: str, event: Optional[Dict]) -> None:
-        await ws.send_str(json.dumps({
-            "event_type": event_type,
-            "event": event,
-        }))
-
-    async def __broadcast_event(self, event_type: str, event: Optional[Dict]) -> None:
-        if self.__ws_clients:
-            await asyncio.gather(*[
-                self.__send_event(client.ws, event_type, event)
-                for client in list(self.__ws_clients)
-                if (
-                    not client.ws.closed
-                    and client.ws._req is not None  # pylint: disable=protected-access
-                    and client.ws._req.transport is not None  # pylint: disable=protected-access
-                )
-            ], return_exceptions=True)
 
     async def __register_ws_client(self, client: _WsClient) -> None:
         async with self.__ws_clients_lock:
@@ -454,7 +400,10 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
 
     async def __poll_state(self, event_type: str, poller: AsyncGenerator[Dict, None]) -> None:
         async for state in poller:
-            await self.__broadcast_event(event_type, state)
+            await broadcast_ws_event([
+                client.ws
+                for client in list(self.__ws_clients)
+            ], event_type, state)
 
     async def __stream_snapshoter(self) -> None:
         await self.__snapshoter.run(
