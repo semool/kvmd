@@ -3,7 +3,9 @@ FROM archlinux/archlinux:base-devel
 RUN mkdir -p /etc/pacman.d/hooks \
 	&& ln -s /dev/null /etc/pacman.d/hooks/30-systemd-tmpfiles.hook
 
-RUN echo "Server = http://mirror.yandex.ru/archlinux/\$repo/os/\$arch" > /etc/pacman.d/mirrorlist
+RUN echo "Server = http://mirror.yandex.ru/archlinux/\$repo/os/\$arch" > /etc/pacman.d/mirrorlist \
+	&& pacman-key --init \
+	&& pacman-key --populate archlinux
 
 RUN pacman --noconfirm --ask=4 -Syy \
 	&& pacman --needed --noconfirm --ask=4 -S \
@@ -43,6 +45,7 @@ RUN pacman --noconfirm --ask=4 -Syy \
 		python-netifaces \
 		python-systemd \
 		python-dbus \
+		python-dbus-next \
 		python-pygments \
 		python-pam \
 		python-pillow \
