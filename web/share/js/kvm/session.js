@@ -130,7 +130,8 @@ export function Session() {
 		let html = "";
 		if (__info_hw_state !== null) {
 			html += `
-				Platform base: <span class="code-comment">${__info_hw_state.platform.base}</span><br>
+				Platform:
+				${__formatPlatform(__info_hw_state.platform)}
 				<hr>
 				Temperature:
 				${__formatTemp(__info_hw_state.health.temp)}
@@ -149,6 +150,10 @@ export function Session() {
 			`;
 		}
 		$("about-hardware").innerHTML = html;
+	};
+
+	var __formatPlatform = function(state) {
+		return __formatUl([["Base", state.base], ["Serial", state.serial]]);
 	};
 
 	var __formatFan = function(state) {
@@ -182,22 +187,18 @@ export function Session() {
 		if (throttling !== null) {
 			let pairs = [];
 			for (let field of Object.keys(throttling.parsed_flags).sort()) {
+				let flags = throttling.parsed_flags[field];
 				pairs.push([
 					tools.upperFirst(field).replace("_", " "),
-					__formatThrottleError(throttling.parsed_flags[field]),
+					(flags["now"] ? __colored("red", "RIGHT NOW") : __colored("green", "No"))
+					+ "; " +
+					(flags["past"] ? __colored("red", "In the past") : __colored("green", "Never")),
 				]);
 			}
 			return __formatUl(pairs);
 		} else {
 			return "NO DATA";
 		}
-	};
-
-	var __formatThrottleError = function(flags) {
-		return `
-			${flags["now"] ? __colored("red", "RIGHT NOW") : __colored("green", "No")};
-			${flags["past"] ? __colored("red", "In the past") : __colored("green", "Never")}
-		`;
 	};
 
 	var __colored = function(color, text) {
