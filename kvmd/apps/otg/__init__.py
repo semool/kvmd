@@ -78,8 +78,12 @@ def _unlink(path: str, optional: bool=False) -> None:
     os.unlink(path)
 
 
-def _write(path: str, value: Union[str, int]) -> None:
-    get_logger().info("WRITE --- %s", path)
+def _write(path: str, value: Union[str, int], optional: bool=False) -> None:
+    logger = get_logger()
+    if optional and not os.access(path, os.F_OK):
+        logger.info("WRITE --- [SKIPPED] %s", path)
+        return
+    logger.info("WRITE --- %s", path)
     with open(path, "w") as param_file:
         param_file.write(str(value))
 
@@ -158,9 +162,9 @@ class _GadgetConfig:
         func = f"hid.usb{self.__hid_instance}"
         func_path = join(self.__gadget_path, "functions", func)
         _mkdir(func_path)
-        _write(join(func_path, "no_out_endpoint"), "1")
+        _write(join(func_path, "no_out_endpoint"), "1", optional=True)
         if remote_wakeup:
-            _write(join(func_path, "wakeup_on_write"), "1")
+            _write(join(func_path, "wakeup_on_write"), "1", optional=True)
         _write(join(func_path, "protocol"), hid.protocol)
         _write(join(func_path, "subclass"), hid.subclass)
         _write(join(func_path, "report_length"), hid.report_length)

@@ -64,6 +64,7 @@ export function Mouse(__getGeometry, __recordWsEvent) {
 		$("stream-box").ontouchstart = (event) => __streamTouchMoveHandler(event);
 
 		tools.storage.bindSimpleSwitch($("hid-mouse-squash-switch"), "hid.mouse.squash", true);
+		tools.storage.bindSimpleSwitch($("hid-mouse-reverse-scrolling-switch"), "hid.mouse.reverse_scrolling", false);
 		tools.slider.setParams($("hid-mouse-sens-slider"), 0.1, 1.9, 0.1, tools.storage.get("hid.mouse.sens", 1.0), __updateRelativeSens);
 		tools.slider.setParams($("hid-mouse-rate-slider"), 10, 100, 10, tools.storage.get("hid.mouse.rate", 100), __updateRate); // set __timer
 	};
@@ -157,10 +158,6 @@ export function Mouse(__getGeometry, __recordWsEvent) {
 		return (document.pointerLockElement === $("stream-box"));
 	};
 
-	var __isRelativeSquashed = function() {
-		return $("hid-mouse-squash-switch").checked;
-	};
-
 	var __relativeCapturedHandler = function() {
 		tools.info("Relative mouse", (__isRelativeCaptured() ? "captured" : "released"), "by pointer lock");
 		__updateOnlineLeds();
@@ -208,7 +205,7 @@ export function Mouse(__getGeometry, __recordWsEvent) {
 				x: Math.min(Math.max(-127, Math.floor(event.movementX * __relative_sens)), 127),
 				y: Math.min(Math.max(-127, Math.floor(event.movementY * __relative_sens)), 127),
 			};
-			if (__isRelativeSquashed()) {
+			if ($("hid-mouse-squash-switch").checked) {
 				__relative_deltas.push(delta);
 			} else {
 				tools.debug("Mouse: relative:", delta);
@@ -280,6 +277,10 @@ export function Mouse(__getGeometry, __recordWsEvent) {
 		}
 
 		if (delta.x || delta.y) {
+			if ($("hid-mouse-reverse-scrolling-switch").checked) {
+				delta.x *= -1;
+				delta.y *= -1;
+			}
 			tools.debug("Mouse: scrolled:", delta);
 			__sendEvent("mouse_wheel", {"delta": delta});
 		}
