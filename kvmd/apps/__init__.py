@@ -113,6 +113,7 @@ def init(
     description: Optional[str]=None,
     add_help: bool=True,
     check_run: bool=False,
+    cli_logging: bool=False,
     argv: Optional[List[str]]=None,
     **load: bool,
 ) -> Tuple[argparse.ArgumentParser, List[str], Section]:
@@ -126,11 +127,11 @@ def init(
         add_help=add_help,
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("-c", "--config", dest="config_path", default="/etc/kvmd/main.yaml", type=valid_abs_file,
+    parser.add_argument("-c", "--config", default="/etc/kvmd/main.yaml", type=valid_abs_file,
                         help="Set config file path", metavar="<file>")
-    parser.add_argument("-o", "--set-options", dest="set_options", default=[], nargs="+",
+    parser.add_argument("-o", "--set-options", default=[], nargs="+",
                         help="Override config options list (like sec/sub/opt=value)", metavar="<k=v>",)
-    parser.add_argument("-m", "--dump-config", dest="dump_config", action="store_true",
+    parser.add_argument("-m", "--dump-config", action="store_true",
                         help="View current configuration (include all overrides)")
     if check_run:
         parser.add_argument("--run", dest="run", action="store_true",
@@ -139,7 +140,7 @@ def init(
 
     if options.dump_config:
         _dump_config(_init_config(
-            config_path=options.config_path,
+            config_path=options.config,
             override_options=options.set_options,
             load_auth=True,
             load_hid=True,
@@ -148,10 +149,15 @@ def init(
             load_gpio=True,
         ))
         raise SystemExit()
-    config = _init_config(options.config_path, options.set_options, **load)
+    config = _init_config(options.config, options.set_options, **load)
 
     logging.captureWarnings(True)
     logging.config.dictConfig(config.logging)
+    if cli_logging:
+        logging.getLogger().handlers[0].setFormatter(logging.Formatter(
+            "-- {levelname:>7} -- {message}",
+            style="{",
+        ))
 
     if check_run and not options.run:
         raise SystemExit(
@@ -483,6 +489,26 @@ def _get_config_scheme() -> Dict:
                     "table": Option([], type=valid_ugpio_view_table),
                 },
             },
+        },
+
+        "pst": {
+            "server": {
+                "unix":              Option("/run/kvmd/pst.sock", type=valid_abs_path, unpack_as="unix_path"),
+                "unix_rm":           Option(True,  type=valid_bool),
+                "unix_mode":         Option(0o660, type=valid_unix_mode),
+                "heartbeat":         Option(15.0,  type=valid_float_f01),
+                "access_log_format": Option("[%P / %{X-Real-IP}i] '%r' => %s; size=%b ---"
+                                            " referer='%{Referer}i'; user_agent='%{User-Agent}i'"),
+            },
+
+            "storage":          Option("/var/lib/kvmd/pst", type=valid_abs_dir, unpack_as="storage_path"),
+            "ro_retries_delay": Option(10.0, type=valid_float_f01),
+            "ro_cleanup_delay": Option(3.0,  type=valid_float_f01),
+
+            "remount_cmd": Option([
+                "/usr/bin/sudo", "--non-interactive",
+                "/usr/bin/kvmd-helper-pst-remount", "{mode}",
+            ], type=valid_command),
         },
 
         "otg": {

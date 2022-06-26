@@ -20,8 +20,9 @@
 # ========================================================================== #
 
 
-import asyncio
+import os
 import signal
+import asyncio
 import functools
 import types
 
@@ -42,38 +43,74 @@ from .logging import get_logger
 
 
 # =====
-_ATTR_SHORT_TASK = "_aiotools_short_task"
-
-_MethodT = TypeVar("_MethodT", bound=Callable[..., Any])
+_FunctionT = TypeVar("_FunctionT", bound=Callable[..., Any])
 _RetvalT = TypeVar("_RetvalT")
 
 
 # =====
-def atomic(method: _MethodT) -> _MethodT:
-    @functools.wraps(method)
+def atomic(func: _FunctionT) -> _FunctionT:
+    @functools.wraps(func)
     async def wrapper(*args: Any, **kwargs: Any) -> Any:
-        return (await asyncio.shield(method(*args, **kwargs)))
-    return typing.cast(_MethodT, wrapper)
+        return (await asyncio.shield(func(*args, **kwargs)))
+    return typing.cast(_FunctionT, wrapper)
 
 
 # =====
+_ATTR_SHORT_TASK = "_aiotools_short_task"
+
+
 def create_short_task(coro: Coroutine) -> asyncio.Task:
     task = asyncio.create_task(coro)
     setattr(task, _ATTR_SHORT_TASK, True)
     return task
 
 
-def get_short_tasks() -> List[asyncio.Task]:
-    return [
+async def wait_all_short_tasks() -> None:
+    await asyncio.gather(*[
         task
         for task in asyncio.all_tasks()
         if getattr(task, _ATTR_SHORT_TASK, False)
-    ]
+    ], return_exceptions=True)
 
 
 # =====
-async def run_async(method: Callable[..., _RetvalT], *args: Any) -> _RetvalT:
-    return (await asyncio.get_running_loop().run_in_executor(None, method, *args))
+_ATTR_DEADLY_TASK = "_aiotools_deadly_task"
+
+
+def create_deadly_task(name: str, coro: Coroutine) -> asyncio.Task:
+    logger = get_logger()
+
+    async def wrapper() -> None:
+        try:
+            await coro
+            raise RuntimeError(f"Deadly task is dead: {name}")
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception("Unhandled exception in deadly task, killing myself ...")
+            pid = os.getpid()
+            if pid == 1:
+                os._exit(1)  # Docker workaround  # pylint: disable=protected-access
+            else:
+                os.kill(pid, signal.SIGTERM)
+
+    task = asyncio.create_task(wrapper())
+    setattr(task, _ATTR_DEADLY_TASK, True)
+    return task
+
+
+async def stop_all_deadly_tasks() -> None:
+    tasks: List[asyncio.Task] = []
+    for task in asyncio.all_tasks():
+        if getattr(task, _ATTR_DEADLY_TASK, False):
+            tasks.append(task)
+            task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+
+
+# =====
+async def run_async(func: Callable[..., _RetvalT], *args: Any) -> _RetvalT:
+    return (await asyncio.get_running_loop().run_in_executor(None, func, *args))
 
 
 def run_sync(coro: Coroutine[Any, Any, _RetvalT]) -> _RetvalT:
@@ -82,7 +119,8 @@ def run_sync(coro: Coroutine[Any, Any, _RetvalT]) -> _RetvalT:
 
 # =====
 async def wait_infinite() -> None:
-    await asyncio.get_event_loop().create_future()
+    while True:
+        await asyncio.sleep(3600)
 
 
 async def wait_first(*aws: Awaitable) -> Tuple[Set[asyncio.Task], Set[asyncio.Task]]:
@@ -216,7 +254,7 @@ class AioExclusiveRegion:
 async def run_region_task(
     msg: str,
     region: AioExclusiveRegion,
-    method: Callable[..., Coroutine[Any, Any, None]],
+    func: Callable[..., Coroutine[Any, Any, None]],
     *args: Any,
     **kwargs: Any,
 ) -> None:
@@ -227,7 +265,7 @@ async def run_region_task(
         try:
             async with region:
                 entered.set_result(None)
-                await method(*args, **kwargs)
+                await func(*args, **kwargs)
         except region.get_exc_type():
             raise
         except Exception:

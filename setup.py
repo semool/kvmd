@@ -66,7 +66,7 @@ def main() -> None:
 
     setup(
         name="kvmd",
-        version="3.103",
+        version="3.116",
         url="https://github.com/pikvm/kvmd",
         license="GPLv3",
         author="Maxim Devaev",
@@ -95,6 +95,8 @@ def main() -> None:
             "kvmd.apps.kvmd",
             "kvmd.apps.kvmd.info",
             "kvmd.apps.kvmd.api",
+            "kvmd.apps.pst",
+            "kvmd.apps.pstrun",
             "kvmd.apps.otg",
             "kvmd.apps.otg.hid",
             "kvmd.apps.otgnet",
@@ -110,6 +112,7 @@ def main() -> None:
             "kvmd.apps.watchdog",
             "kvmd.helpers",
             "kvmd.helpers.remount",
+            "kvmd.helpers.swapfiles",
         ],
 
         package_data={
@@ -119,6 +122,8 @@ def main() -> None:
         entry_points={
             "console_scripts": [
                 "kvmd = kvmd.apps.kvmd:main",
+                "kvmd-pst = kvmd.apps.pst:main",
+                "kvmd-pstrun = kvmd.apps.pstrun:main",
                 "kvmd-otg = kvmd.apps.otg:main",
                 "kvmd-otgnet = kvmd.apps.otgnet:main",
                 "kvmd-otgmsd = kvmd.apps.otgmsd:main",
@@ -130,8 +135,9 @@ def main() -> None:
                 "kvmd-vnc = kvmd.apps.vnc:main",
                 "kvmd-janus = kvmd.apps.janus:main",
                 "kvmd-watchdog = kvmd.apps.watchdog:main",
-                "kvmd-helper-otgmsd-remount = kvmd.helpers.remount:main",
                 "kvmd-helper-pst-remount = kvmd.helpers.remount:main",
+                "kvmd-helper-otgmsd-remount = kvmd.helpers.remount:main",
+                "kvmd-helper-swapfiles = kvmd.helpers.swapfiles:main",
             ],
         },
 

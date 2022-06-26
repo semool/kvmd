@@ -20,4 +20,36 @@
 # ========================================================================== #
 
 
-__version__ = "3.116"
+import sys
+import os
+import ctypes
+import ctypes.util
+
+from ctypes import c_int
+from ctypes import c_uint
+from ctypes import c_char_p
+
+
+# =====
+def main() -> None:
+    if len(sys.argv) != 3:
+        raise SystemExit(f"Usage: {sys.argv[0]} <file1> <file2>")
+
+    path = ctypes.util.find_library("c")
+    if not path:
+        raise SystemExit("Where is libc?")
+    assert path
+    libc = ctypes.CDLL(path)
+    libc.renameat2.restype = c_int
+    libc.renameat2.argtypes = [c_int, c_char_p, c_int, c_char_p, c_uint]
+
+    result = libc.renameat2(
+        -100,  # AT_FDCWD
+        os.fsencode(sys.argv[1]),
+        -100,
+        os.fsencode(sys.argv[2]),
+        (1 << 1),  # RENAME_EXCHANGE
+    )
+
+    if result != 0:
+        raise SystemExit(f"{sys.argv[0]}: {os.strerror(ctypes.get_errno())}")

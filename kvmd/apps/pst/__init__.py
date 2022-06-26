@@ -20,4 +20,27 @@
 # ========================================================================== #
 
 
-__version__ = "3.116"
+from typing import List
+from typing import Optional
+
+from ...logging import get_logger
+
+from .. import init
+
+from .server import PstServer
+
+
+# =====
+def main(argv: Optional[List[str]]=None) -> None:
+    config = init(
+        prog="kvmd-pst",
+        description="The KVMD persistent storage manager",
+        argv=argv,
+        check_run=True,
+    )[2]
+
+    PstServer(
+        **config.pst._unpack(ignore="server"),
+    ).run(**config.pst.server._unpack())
+
+    get_logger(0).info("Bye-bye")
