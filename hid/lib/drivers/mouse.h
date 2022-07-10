@@ -1,4 +1,4 @@
-# ========================================================================== #
+/*****************************************************************************
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
@@ -17,7 +17,18 @@
 #    You should have received a copy of the GNU General Public License       #
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.  #
 #                                                                            #
-# ========================================================================== #
+*****************************************************************************/
 
 
-__version__ = "3.119"
+#pragma once
+
+#include <stdint.h>
+
+#include "driver.h"
+
+
+namespace DRIVERS {
+	class Mouse : public Driver {
+		using Driver::Driver;
+	};
+}

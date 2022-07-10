@@ -25,27 +25,28 @@
 #include <Arduino.h>
 #include <ps2dev.h>
 
+#include "keyboard.h"
 #include "keymap.h"
 
 // #define HID_PS2_KBD_CLOCK_PIN	7
 // #define HID_PS2_KBD_DATA_PIN		5
 
 
-class Ps2Keyboard {
+class Ps2Keyboard : public DRIVERS::Keyboard {
 	// https://wiki.osdev.org/PS/2_Keyboard
 
 	public:
-		Ps2Keyboard() : _dev(HID_PS2_KBD_CLOCK_PIN, HID_PS2_KBD_DATA_PIN) {}
+		Ps2Keyboard() : DRIVERS::Keyboard(DRIVERS::PS2_KEYBOARD), _dev(HID_PS2_KBD_CLOCK_PIN, HID_PS2_KBD_DATA_PIN) {}
 
-		void begin() {
+		void begin() override {
 			_dev.keyboard_init();
 		}
 
-		void periodic() {
+		void periodic() override {
 			_dev.keyboard_handle(&_leds);
 		}
 
-		void sendKey(uint8_t code, bool state) {
+		void sendKey(uint8_t code, bool state) override {
 			Ps2KeyType ps2_type;
 			uint8_t ps2_code;
 
@@ -74,17 +75,17 @@ class Ps2Keyboard {
 			}
 		}
 
-		uint8_t getOfflineAs(uint8_t offline) {
-			return 0;
+		bool isOffline() override {
+			return false;
 		}
 
-		uint8_t getLedsAs(uint8_t caps, uint8_t scroll, uint8_t num) {
-			uint8_t result = 0;
-
+		KeyboardLedsState getLeds() override {
 			periodic();
-			if (_leds & 0b00000100) result |= caps;
-			if (_leds & 0b00000001) result |= scroll;
-			if (_leds & 0b00000010) result |= num;
+			KeyboardLedsState result = {
+				.caps = _leds & 0b00000100,
+				.scroll = _leds & 0b00000001,
+				.num = _leds & 0b00000010,
+			};
 			return result;
 		}
 

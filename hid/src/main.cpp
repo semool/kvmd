@@ -49,11 +49,10 @@
 
 
 // -----------------------------------------------------------------------------
-static UsbKeyboard *_usb_kbd = NULL;
 static UsbMouseAbsolute *_usb_mouse_abs = NULL;
 static UsbMouseRelative *_usb_mouse_rel = NULL;
 
-static Ps2Keyboard *_ps2_kbd = NULL;
+static DRIVERS::Keyboard *_kbd = nullptr;
 
 #ifdef HID_DYNAMIC
 static bool _reset_required = false;
@@ -114,32 +113,38 @@ static void _initOutputs() {
 	uint8_t kbd = outputs & PROTO::OUTPUTS1::KEYBOARD::MASK;
 	switch (kbd) {
 #	ifdef HID_WITH_USB
-		case PROTO::OUTPUTS1::KEYBOARD::USB: _usb_kbd = new UsbKeyboard(); break;
+		case PROTO::OUTPUTS1::KEYBOARD::USB:
+			_kbd = new UsbKeyboard();
+			break;
 #	endif
 #	ifdef HID_WITH_PS2
-		case PROTO::OUTPUTS1::KEYBOARD::PS2: _ps2_kbd = new Ps2Keyboard(); break;
+		case PROTO::OUTPUTS1::KEYBOARD::PS2:
+			_kbd = new Ps2Keyboard();
+			break;
 #	endif
+		default:
+			_kbd = new DRIVERS::Keyboard(DRIVERS::DUMMY);
+			break;
 	}
 
 	uint8_t mouse = outputs & PROTO::OUTPUTS1::MOUSE::MASK;
 	switch (mouse) {
 #	ifdef HID_WITH_USB
 		case PROTO::OUTPUTS1::MOUSE::USB_ABS:
-		case PROTO::OUTPUTS1::MOUSE::USB_WIN98: _usb_mouse_abs = new UsbMouseAbsolute(); break;
-		case PROTO::OUTPUTS1::MOUSE::USB_REL: _usb_mouse_rel = new UsbMouseRelative(); break;
+			_usb_mouse_abs = new UsbMouseAbsolute(DRIVERS::USB_MOUSE_ABSOLUTE);
+			break;
+		case PROTO::OUTPUTS1::MOUSE::USB_WIN98:
+			_usb_mouse_abs = new UsbMouseAbsolute(DRIVERS::USB_MOUSE_ABSOLUTE_WIN98);
+			break;
+		case PROTO::OUTPUTS1::MOUSE::USB_REL:
+			_usb_mouse_rel = new UsbMouseRelative();
+			break;
 #	endif
 	}
 
 	USBDevice.attach();
 
-	switch (kbd) {
-#	ifdef HID_WITH_USB
-		case PROTO::OUTPUTS1::KEYBOARD::USB: _usb_kbd->begin(); break;
-#	endif
-#	ifdef HID_WITH_PS2
-		case PROTO::OUTPUTS1::KEYBOARD::PS2: _ps2_kbd->begin(); break;
-#	endif
-	}
+	_kbd->begin();
 
 	switch (mouse) {
 #	ifdef HID_WITH_USB
@@ -147,9 +152,11 @@ static void _initOutputs() {
 #		ifdef HID_WITH_USB_WIN98
 		case PROTO::OUTPUTS1::MOUSE::USB_WIN98:
 #		endif
-			_usb_mouse_abs->begin(mouse == PROTO::OUTPUTS1::MOUSE::USB_WIN98);
+			_usb_mouse_abs->begin();
 			break;
-		case PROTO::OUTPUTS1::MOUSE::USB_REL: _usb_mouse_rel->begin(); break;
+		case PROTO::OUTPUTS1::MOUSE::USB_REL:
+			_usb_mouse_rel->begin();
+			break;
 #	endif
 	}
 }
@@ -177,9 +184,7 @@ static void _cmdSetConnected(const uint8_t *data) { // 1 byte
 }
 
 static void _cmdClearHid(const uint8_t *_) { // 0 bytes
-	if (_usb_kbd) {
-		_usb_kbd->clear();
-	}
+	_kbd->clear();
 	if (_usb_mouse_abs) {
 		_usb_mouse_abs->clear();
 	} else if (_usb_mouse_rel) {
@@ -188,11 +193,7 @@ static void _cmdClearHid(const uint8_t *_) { // 0 bytes
 }
 
 static void _cmdKeyEvent(const uint8_t *data) { // 2 bytes
-	if (_usb_kbd) {
-		_usb_kbd->sendKey(data[0], data[1]);
-	} else if (_ps2_kbd) {
-		_ps2_kbd->sendKey(data[0], data[1]);
-	}
+	_kbd->sendKey(data[0], data[1]);
 }
 
 static void _cmdMouseButtonEvent(const uint8_t *data) { // 2 bytes
@@ -283,24 +284,30 @@ static void _sendResponse(uint8_t code) {
 		}
 		response[2] = PROTO::OUTPUTS1::DYNAMIC;
 #		endif
-		if (_usb_kbd) {
-			response[1] |= _usb_kbd->getOfflineAs(PROTO::PONG::KEYBOARD_OFFLINE);
-			response[1] |= _usb_kbd->getLedsAs(PROTO::PONG::CAPS, PROTO::PONG::SCROLL, PROTO::PONG::NUM);
-			response[2] |= PROTO::OUTPUTS1::KEYBOARD::USB;
-		} else if (_ps2_kbd) {
-			response[1] |= _ps2_kbd->getOfflineAs(PROTO::PONG::KEYBOARD_OFFLINE);
-			response[1] |= _ps2_kbd->getLedsAs(PROTO::PONG::CAPS, PROTO::PONG::SCROLL, PROTO::PONG::NUM);
-			response[2] |= PROTO::OUTPUTS1::KEYBOARD::PS2;
+		if (_kbd->getType() != DRIVERS::DUMMY) {
+			response[1] |= (_kbd->isOffline() ? PROTO::PONG::KEYBOARD_OFFLINE : 0);
+			KeyboardLedsState leds = _kbd->getLeds();
+			response[1] |= (leds.caps ? PROTO::PONG::CAPS : 0);
+			response[1] |= (leds.num ? PROTO::PONG::NUM : 0);
+			response[1] |= (leds.scroll ? PROTO::PONG::SCROLL : 0);
+			switch (_kbd->getType()) {
+				case DRIVERS::USB_KEYBOARD:
+					response[2] |= PROTO::OUTPUTS1::KEYBOARD::USB;
+					break;			
+				case DRIVERS::PS2_KEYBOARD:
+					response[2] |= PROTO::OUTPUTS1::KEYBOARD::PS2;
+					break;			
+			}	
 		}
 		if (_usb_mouse_abs) {
-			response[1] |= _usb_mouse_abs->getOfflineAs(PROTO::PONG::MOUSE_OFFLINE);
-			if (_usb_mouse_abs->isWin98FixEnabled()) {
+			response[1] |= (_usb_mouse_abs->isOffline() ? PROTO::PONG::MOUSE_OFFLINE : 0);
+			if (_usb_mouse_abs->getType() == DRIVERS::USB_MOUSE_ABSOLUTE_WIN98) {
 				response[2] |= PROTO::OUTPUTS1::MOUSE::USB_WIN98;
 			} else {
 				response[2] |= PROTO::OUTPUTS1::MOUSE::USB_ABS;
 			}
 		} else if (_usb_mouse_rel) {
-			response[1] |= _usb_mouse_rel->getOfflineAs(PROTO::PONG::MOUSE_OFFLINE);
+			response[1] |= (_usb_mouse_rel->isOffline() ? PROTO::PONG::MOUSE_OFFLINE : 0);
 			response[2] |= PROTO::OUTPUTS1::MOUSE::USB_REL;
 		} // TODO: ps2
 #		ifdef AUM
@@ -353,16 +360,7 @@ int main() {
 		aumProxyUsbVbus();
 #		endif
 
-#		ifdef HID_WITH_USB
-		if (_usb_kbd) {
-			_usb_kbd->periodic();
-		}
-#		endif
-#		ifdef HID_WITH_PS2
-		if (_ps2_kbd) {
-			_ps2_kbd->periodic();
-		}
-#		endif
+		_kbd->periodic();
 
 #		ifdef CMD_SERIAL
 		if (CMD_SERIAL.available() > 0) {

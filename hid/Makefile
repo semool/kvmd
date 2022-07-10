@@ -9,6 +9,9 @@ _build:
 	platformio run --environment $(E)
 	echo -n $(E) > .current
 
+# Added to easy test all builds
+_build_all: aum spi serial
+	rm -f .current
 
 install: upload
 upload:
