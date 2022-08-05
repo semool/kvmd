@@ -23,6 +23,7 @@
 import os
 import signal
 import asyncio
+import ssl
 import functools
 import types
 
@@ -40,6 +41,41 @@ from typing import Optional
 from typing import Any
 
 from .logging import get_logger
+
+
+# =====
+def run(coro: Coroutine, final: Optional[Coroutine]=None) -> None:
+    # https://github.com/aio-libs/aiohttp/blob/a1d4dac1d/aiohttp/web.py#L515
+
+    def sigint_handler() -> None:
+        raise KeyboardInterrupt()
+
+    def sigterm_handler() -> None:
+        raise SystemExit()
+
+    loop = asyncio.get_event_loop()
+    loop.add_signal_handler(signal.SIGINT, sigint_handler)
+    loop.add_signal_handler(signal.SIGTERM, sigterm_handler)
+
+    main_task = loop.create_task(coro)
+    try:
+        loop.run_until_complete(main_task)
+    except (SystemExit, KeyboardInterrupt):
+        pass
+    finally:
+        main_task.cancel()
+        loop.run_until_complete(asyncio.gather(main_task, return_exceptions=True))
+
+        if final is not None:
+            loop.run_until_complete(final)
+
+        tasks = asyncio.all_tasks(loop)
+        for task in tasks:
+            task.cancel()
+        loop.run_until_complete(asyncio.gather(*tasks, return_exceptions=True))
+
+        loop.run_until_complete(loop.shutdown_asyncgens())
+        loop.close()
 
 
 # =====
@@ -133,25 +169,21 @@ async def close_writer(writer: asyncio.StreamWriter) -> bool:
     if not closing:
         writer.transport.abort()  # type: ignore
         writer.close()
-    try:
-        await writer.wait_closed()
-    except Exception:
-        pass
+        # FIXME: Unwrap the SSL socket, ignoring want-read errors
+        #   - https://bugs.python.org/issue39758
+        #   - https://github.com/encode/httpcore/pull/84/files
+        try:
+            ssl_obj = writer.get_extra_info("ssl_object")
+            if ssl_obj is not None:
+                ssl_obj.unwrap()
+        except ssl.SSLWantReadError:
+            pass
+        else:
+            try:
+                await writer.wait_closed()
+            except Exception:
+                pass
     return (not closing)
-
-
-# =====
-def run(coro: Coroutine) -> None:
-    def sigint_handler() -> None:
-        raise KeyboardInterrupt()
-
-    def sigterm_handler() -> None:
-        raise SystemExit()
-
-    loop = asyncio.get_event_loop()
-    loop.add_signal_handler(signal.SIGINT, sigint_handler)
-    loop.add_signal_handler(signal.SIGTERM, sigterm_handler)
-    loop.run_until_complete(coro)
 
 
 # =====

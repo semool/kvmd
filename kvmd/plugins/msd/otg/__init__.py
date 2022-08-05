@@ -57,7 +57,8 @@ from .. import MsdImageNotSelected
 from .. import MsdUnknownImageError
 from .. import MsdImageExistsError
 from .. import BaseMsd
-from .. import MsdImageWriter
+from .. import MsdFileReader
+from .. import MsdFileWriter
 
 from . import fs
 
@@ -94,6 +95,7 @@ class _VirtualDriveState:
     image: Optional[_DriveImage]
     connected: bool
     cdrom: bool
+    rw: bool
 
     @classmethod
     def from_drive_state(cls, state: _DriveState) -> "_VirtualDriveState":
@@ -101,6 +103,7 @@ class _VirtualDriveState:
             image=state.image,
             connected=bool(state.image),
             cdrom=state.cdrom,
+            rw=state.rw,
         )
 
 
@@ -134,7 +137,8 @@ class _State:
 class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
     def __init__(  # pylint: disable=super-init-not-called
         self,
-        upload_chunk_size: int,
+        read_chunk_size: int,
+        write_chunk_size: int,
         sync_chunk_size: int,
 
         storage_path: str,
@@ -146,7 +150,8 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
         gadget: str,  # XXX: Not from options, see /kvmd/apps/kvmd/__init__.py for details
     ) -> None:
 
-        self.__upload_chunk_size = upload_chunk_size
+        self.__read_chunk_size = read_chunk_size
+        self.__write_chunk_size = write_chunk_size
         self.__sync_chunk_size = sync_chunk_size
 
         self.__storage_path = os.path.normpath(storage_path)
@@ -160,8 +165,8 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
 
         self.__drive = Drive(gadget, instance=0, lun=0)
 
-        self.__new_writer: Optional[MsdImageWriter] = None
-        self.__new_writer_tick = 0.0
+        self.__reader: Optional[MsdFileReader] = None
+        self.__writer: Optional[MsdFileWriter] = None
 
         self.__notifier = aiotools.AioNotifier()
         self.__state = _State(self.__notifier)
@@ -173,7 +178,8 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
     @classmethod
     def get_plugin_options(cls) -> Dict:
         return {
-            "upload_chunk_size": Option(65536,   type=functools.partial(valid_number, min=1024)),
+            "read_chunk_size":   Option(65536,   type=functools.partial(valid_number, min=1024)),
+            "write_chunk_size":  Option(65536,   type=functools.partial(valid_number, min=1024)),
             "sync_chunk_size":   Option(4194304, type=functools.partial(valid_number, min=1024)),
 
             "storage": Option("/var/lib/kvmd/msd", type=valid_abs_dir, unpack_as="storage_path"),
@@ -198,9 +204,11 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
                     del storage["images"][name]["path"]
                     del storage["images"][name]["in_storage"]
 
-                if self.__new_writer:
+                storage["downloading"] = (self.__reader.get_state() if self.__reader else None)
+
+                if self.__writer:
                     # При загрузке файла показываем актуальную статистику вручную
-                    storage["uploading"] = self.__new_writer.get_state()
+                    storage["uploading"] = self.__writer.get_state()
                     space = fs.get_fs_space(self.__storage_path, fatal=False)
                     if space:
                         storage.update(dataclasses.asdict(space))
@@ -222,6 +230,7 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
                 "features": {
                     "multi": True,
                     "cdrom": True,
+                    "rw": True,
                 },
             }
 
@@ -242,19 +251,27 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
         async with self.__state.busy(check_online=False):
             try:
                 self.__drive.set_image_path("")
-                self.__drive.set_rw_flag(False)
                 self.__drive.set_cdrom_flag(False)
+                self.__drive.set_rw_flag(False)
+                await self.__remount_rw(False)
             except Exception:
-                get_logger(0).exception("Can't reset MSD")
+                get_logger(0).exception("Can't reset MSD properly")
 
     @aiotools.atomic
     async def cleanup(self) -> None:
-        await self.__close_new_writer()
+        await self.__close_reader()
+        await self.__close_writer()
 
     # =====
 
     @aiotools.atomic
-    async def set_params(self, name: Optional[str]=None, cdrom: Optional[bool]=None) -> None:
+    async def set_params(
+        self,
+        name: Optional[str]=None,
+        cdrom: Optional[bool]=None,
+        rw: Optional[bool]=None,
+    ) -> None:
+
         async with self.__state.busy():
             assert self.__state.storage
             assert self.__state.vd
@@ -274,6 +291,13 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
 
             if cdrom is not None:
                 self.__state.vd.cdrom = cdrom
+                if cdrom:
+                    rw = False
+
+            if rw is not None:
+                self.__state.vd.rw = rw
+                if rw:
+                    self.__state.vd.cdrom = False
 
     @aiotools.atomic
     async def set_connected(self, connected: bool) -> None:
@@ -290,20 +314,63 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
                 if not os.path.exists(self.__state.vd.image.path):
                     raise MsdUnknownImageError()
 
+                self.__drive.set_rw_flag(self.__state.vd.rw)
                 self.__drive.set_cdrom_flag(self.__state.vd.cdrom)
+                if self.__state.vd.rw:
+                    await self.__remount_rw(True)
                 self.__drive.set_image_path(self.__state.vd.image.path)
 
             else:
                 if not (self.__state.vd.connected or self.__drive.get_image_path()):
                     raise MsdDisconnectedError()
                 self.__drive.set_image_path("")
+                await self.__remount_rw(False, fatal=False)
 
             self.__state.vd.connected = connected
 
     @contextlib.asynccontextmanager
-    async def write_image(self, name: str, size: int) -> AsyncGenerator[int, None]:
+    async def read_image(self, name: str) -> AsyncGenerator[MsdFileReader, None]:
         try:
             async with self.__state._region:  # pylint: disable=protected-access
+                try:
+                    async with self.__state._lock:  # pylint: disable=protected-access
+                        await self.__notifier.notify()
+                        assert self.__state.storage
+                        assert self.__state.vd
+
+                        if self.__state.vd.connected or self.__drive.get_image_path():
+                            raise MsdConnectedError()
+
+                        path = os.path.join(self.__images_path, name)
+                        if name not in self.__state.storage.images or not os.path.exists(path):
+                            raise MsdUnknownImageError()
+
+                        self.__reader = await MsdFileReader(
+                            notifier=self.__notifier,
+                            path=path,
+                            chunk_size=self.__read_chunk_size,
+                        ).open()
+
+                    yield self.__reader
+
+                finally:
+                    # FIXME: Перехват важен потому что по какой-то причине await
+                    # во вложенных finally путаются и выполняются не по порядку
+                    try:
+                        await asyncio.shield(self.__close_reader())
+                    except asyncio.CancelledError:
+                        pass
+        finally:
+            try:
+                await asyncio.shield(self.__notifier.notify())
+            except asyncio.CancelledError:
+                pass
+
+    @contextlib.asynccontextmanager
+    async def write_image(self, name: str, size: int, remove_incomplete: Optional[bool]) -> AsyncGenerator[MsdFileWriter, None]:
+        try:
+            async with self.__state._region:  # pylint: disable=protected-access
+                path: str = ""
                 try:
                     async with self.__state._lock:  # pylint: disable=protected-access
                         await self.__notifier.notify()
@@ -317,36 +384,47 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
                         if name in self.__state.storage.images or os.path.exists(path):
                             raise MsdImageExistsError()
 
-                        await self.__remount_storage(rw=True)
+                        await self.__remount_rw(True)
                         self.__set_image_complete(name, False)
 
-                        self.__new_writer = await MsdImageWriter(path, size, self.__sync_chunk_size).open()
+                        self.__writer = await MsdFileWriter(
+                            notifier=self.__notifier,
+                            path=path,
+                            file_size=size,
+                            sync_size=self.__sync_chunk_size,
+                            chunk_size=self.__write_chunk_size,
+                        ).open()
 
                     await self.__notifier.notify()
-                    yield self.__upload_chunk_size
-                    self.__set_image_complete(name, True)
+                    yield self.__writer
+                    self.__set_image_complete(name, self.__writer.is_complete())
 
                 finally:
-                    await self.__close_new_writer()
+                    if remove_incomplete and self.__writer and not self.__writer.is_complete():
+                        # Можно сперва удалить файл, потом закрыть его
+                        try:
+                            os.remove(path)
+                        except Exception:
+                            pass
                     try:
-                        await self.__remount_storage(rw=False)
-                    except Exception:
+                        await asyncio.shield(self.__close_writer())
+                    except asyncio.CancelledError:
+                        pass
+                    try:
+                        await asyncio.shield(self.__remount_rw(False, fatal=False))
+                    except asyncio.CancelledError:
                         pass
         finally:
             # Между закрытием файла и эвентом айнотифи состояние может быть не обновлено,
             # так что форсим обновление вручную, чтобы получить актуальное состояние.
-            await self.__reload_state()
-            await self.__notifier.notify()
-
-    async def write_image_chunk(self, chunk: bytes) -> int:
-        assert self.__new_writer
-        written = await self.__new_writer.write(chunk)
-        now = time.monotonic()
-        if self.__new_writer_tick + 1 < now:
-            # Это нужно для ручного оповещения о свободном пространстве на диске, см. get_state()
-            self.__new_writer_tick = now
-            await self.__notifier.notify()
-        return written
+            try:
+                await asyncio.shield(self.__reload_state())
+            except asyncio.CancelledError:
+                pass
+            try:
+                await asyncio.shield(self.__notifier.notify())
+            except asyncio.CancelledError:
+                pass
 
     @aiotools.atomic
     async def remove(self, name: str) -> None:
@@ -366,22 +444,22 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
                 self.__state.vd.image = None
             del self.__state.storage.images[name]
 
-            await self.__remount_storage(rw=True)
+            await self.__remount_rw(True)
             os.remove(image.path)
             self.__set_image_complete(name, False)
-            await self.__remount_storage(rw=False)
+            await self.__remount_rw(False, fatal=False)
 
     # =====
 
-    async def __close_new_writer(self) -> None:
-        try:
-            if self.__new_writer:
-                get_logger().info("Closing new image file ...")
-                await self.__new_writer.close()
-        except Exception:
-            get_logger().exception("Can't close image file")
-        finally:
-            self.__new_writer = None
+    async def __close_reader(self) -> None:
+        if self.__reader:
+            await self.__reader.close()
+            self.__reader = None
+
+    async def __close_writer(self) -> None:
+        if self.__writer:
+            await self.__writer.close()
+            self.__writer = None
 
     # =====
 
@@ -431,16 +509,13 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
         async with self.__state._lock:  # pylint: disable=protected-access
             try:
                 drive_state = self.__get_drive_state()
-                if drive_state.rw:
-                    # Внештатное использование MSD, ломаемся
-                    raise MsdError("MSD has been switched to RW-mode manually")
 
                 if self.__state.vd is None and drive_state.image is None:
                     # Если только что включились и образ не подключен - попробовать
                     # перемонтировать хранилище (и создать images и meta).
                     logger.info("Probing to remount storage ...")
-                    await self.__remount_storage(rw=True)
-                    await self.__remount_storage(rw=False)
+                    await self.__remount_rw(True)
+                    await self.__remount_rw(False)
                     await self.__setup_initial()
 
                 storage_state = self.__get_storage_state()
@@ -474,6 +549,7 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
             if os.path.exists(path):
                 logger.info("Setting up initial image %r ...", self.__initial_image)
                 try:
+                    self.__drive.set_rw_flag(False)
                     self.__drive.set_cdrom_flag(self.__initial_cdrom)
                     self.__drive.set_image_path(path)
                 except Exception:
@@ -539,6 +615,7 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
 
     # =====
 
-    async def __remount_storage(self, rw: bool) -> None:
+    async def __remount_rw(self, rw: bool, fatal: bool=True) -> None:
         if not (await aiohelpers.remount("MSD", self.__remount_cmd, rw)):
-            raise MsdError("Can't execute remount helper")
+            if fatal:
+                raise MsdError("Can't execute remount helper")

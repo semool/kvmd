@@ -32,9 +32,6 @@
 
 
 #include <Arduino.h>
-#ifdef HID_DYNAMIC
-#	include <avr/eeprom.h>
-#endif
 
 #include "tools.h"
 #include "proto.h"
@@ -44,135 +41,26 @@
 #ifdef AUM
 #	include "aum.h"
 #endif
-#include "usb/hid.h"
-#include "ps2/hid.h"
+#include "outputs.h"
 
 
-// -----------------------------------------------------------------------------
-static UsbMouseAbsolute *_usb_mouse_abs = NULL;
-static UsbMouseRelative *_usb_mouse_rel = NULL;
-
-static DRIVERS::Keyboard *_kbd = nullptr;
-
+static Outputs _out;
 #ifdef HID_DYNAMIC
 static bool _reset_required = false;
-
-static int _readOutputs(void) {
-	uint8_t data[8];
-	eeprom_read_block(data, 0, 8);
-	if (data[0] != PROTO::MAGIC || PROTO::crc16(data, 6) != PROTO::merge8(data[6], data[7])) {
-		return -1;
-	}
-	return data[1];
-}
-
-static void _writeOutputs(uint8_t mask, uint8_t outputs, bool force) {
-	int old = 0;
-	if (!force) {
-		old = _readOutputs();
-		if (old < 0) {
-			old = 0;
-		}
-	}
-	uint8_t data[8] = {0};
-	data[0] = PROTO::MAGIC;
-	data[1] = (old & ~mask) | outputs;
-	PROTO::split16(PROTO::crc16(data, 6), &data[6], &data[7]);
-	eeprom_update_block(data, 0, 8);
-}
 #endif
-
-static void _initOutputs() {
-	int outputs;
-#	ifdef HID_DYNAMIC
-	outputs = _readOutputs();
-	if (outputs < 0) {
-#	endif
-		outputs = 0;
-
-#	if defined(HID_WITH_USB) && defined(HID_SET_USB_KBD)
-		outputs |= PROTO::OUTPUTS1::KEYBOARD::USB;
-#	elif defined(HID_WITH_PS2) && defined(HID_SET_PS2_KBD)
-		outputs |= PROTO::OUTPUTS1::KEYBOARD::PS2;
-#	endif
-#	if defined(HID_WITH_USB) && defined(HID_SET_USB_MOUSE_ABS)
-		outputs |= PROTO::OUTPUTS1::MOUSE::USB_ABS;
-#	elif defined(HID_WITH_USB) && defined(HID_SET_USB_MOUSE_REL)
-		outputs |= PROTO::OUTPUTS1::MOUSE::USB_REL;
-#	elif defined(HID_WITH_PS2) && defined(HID_SET_PS2_MOUSE)
-		outputs |= PROTO::OUTPUTS1::MOUSE::PS2;
-#	elif defined(HID_WITH_USB) && defined(HID_WITH_USB_WIN98) && defined(HID_SET_USB_MOUSE_WIN98)
-		outputs |= PROTO::OUTPUTS1::MOUSE::USB_WIN98;
-#	endif
-
-#	ifdef HID_DYNAMIC
-		_writeOutputs(0xFF, outputs, true);
-	}
-#	endif
-
-	uint8_t kbd = outputs & PROTO::OUTPUTS1::KEYBOARD::MASK;
-	switch (kbd) {
-#	ifdef HID_WITH_USB
-		case PROTO::OUTPUTS1::KEYBOARD::USB:
-			_kbd = new UsbKeyboard();
-			break;
-#	endif
-#	ifdef HID_WITH_PS2
-		case PROTO::OUTPUTS1::KEYBOARD::PS2:
-			_kbd = new Ps2Keyboard();
-			break;
-#	endif
-		default:
-			_kbd = new DRIVERS::Keyboard(DRIVERS::DUMMY);
-			break;
-	}
-
-	uint8_t mouse = outputs & PROTO::OUTPUTS1::MOUSE::MASK;
-	switch (mouse) {
-#	ifdef HID_WITH_USB
-		case PROTO::OUTPUTS1::MOUSE::USB_ABS:
-			_usb_mouse_abs = new UsbMouseAbsolute(DRIVERS::USB_MOUSE_ABSOLUTE);
-			break;
-		case PROTO::OUTPUTS1::MOUSE::USB_WIN98:
-			_usb_mouse_abs = new UsbMouseAbsolute(DRIVERS::USB_MOUSE_ABSOLUTE_WIN98);
-			break;
-		case PROTO::OUTPUTS1::MOUSE::USB_REL:
-			_usb_mouse_rel = new UsbMouseRelative();
-			break;
-#	endif
-	}
-
-	USBDevice.attach();
-
-	_kbd->begin();
-
-	switch (mouse) {
-#	ifdef HID_WITH_USB
-		case PROTO::OUTPUTS1::MOUSE::USB_ABS:
-#		ifdef HID_WITH_USB_WIN98
-		case PROTO::OUTPUTS1::MOUSE::USB_WIN98:
-#		endif
-			_usb_mouse_abs->begin();
-			break;
-		case PROTO::OUTPUTS1::MOUSE::USB_REL:
-			_usb_mouse_rel->begin();
-			break;
-#	endif
-	}
-}
 
 
 // -----------------------------------------------------------------------------
 static void _cmdSetKeyboard(const uint8_t *data) { // 1 bytes
 #	ifdef HID_DYNAMIC
-	_writeOutputs(PROTO::OUTPUTS1::KEYBOARD::MASK, data[0], false);
+	_out.writeOutputs(PROTO::OUTPUTS1::KEYBOARD::MASK, data[0], false);
 	_reset_required = true;
 #	endif
 }
 
 static void _cmdSetMouse(const uint8_t *data) { // 1 bytes
 #	ifdef HID_DYNAMIC
-	_writeOutputs(PROTO::OUTPUTS1::MOUSE::MASK, data[0], false);
+	_out.writeOutputs(PROTO::OUTPUTS1::MOUSE::MASK, data[0], false);
 	_reset_required = true;
 #	endif
 }
@@ -184,62 +72,43 @@ static void _cmdSetConnected(const uint8_t *data) { // 1 byte
 }
 
 static void _cmdClearHid(const uint8_t *_) { // 0 bytes
-	_kbd->clear();
-	if (_usb_mouse_abs) {
-		_usb_mouse_abs->clear();
-	} else if (_usb_mouse_rel) {
-		_usb_mouse_rel->clear();
-	}
+	_out.kbd->clear();
+	_out.mouse->clear();
 }
 
 static void _cmdKeyEvent(const uint8_t *data) { // 2 bytes
-	_kbd->sendKey(data[0], data[1]);
+	_out.kbd->sendKey(data[0], data[1]);
 }
 
 static void _cmdMouseButtonEvent(const uint8_t *data) { // 2 bytes
 #	define MOUSE_PAIR(_state, _button) \
 		_state & PROTO::CMD::MOUSE::_button::SELECT, \
 		_state & PROTO::CMD::MOUSE::_button::STATE
-#	define SEND_BUTTONS(_hid) \
-		_hid->sendButtons( \
-			MOUSE_PAIR(data[0], LEFT), \
-			MOUSE_PAIR(data[0], RIGHT), \
-			MOUSE_PAIR(data[0], MIDDLE), \
-			MOUSE_PAIR(data[1], EXTRA_UP), \
-			MOUSE_PAIR(data[1], EXTRA_DOWN) \
-		);
-	if (_usb_mouse_abs) {
-		SEND_BUTTONS(_usb_mouse_abs);
-	} else if (_usb_mouse_rel) {
-		SEND_BUTTONS(_usb_mouse_rel);
-	}
-#	undef SEND_BUTTONS
+	_out.mouse->sendButtons(
+		MOUSE_PAIR(data[0], LEFT),
+		MOUSE_PAIR(data[0], RIGHT),
+		MOUSE_PAIR(data[0], MIDDLE),
+		MOUSE_PAIR(data[1], EXTRA_UP),
+		MOUSE_PAIR(data[1], EXTRA_DOWN)
+	);
 #	undef MOUSE_PAIR
 }
 
 static void _cmdMouseMoveEvent(const uint8_t *data) { // 4 bytes
 	// See /kvmd/apps/otg/hid/keyboard.py for details
-	if (_usb_mouse_abs) {
-		_usb_mouse_abs->sendMove(
-			PROTO::merge8_int(data[0], data[1]),
-			PROTO::merge8_int(data[2], data[3])
-		);
-	}
+	_out.mouse->sendMove(
+		PROTO::merge8_int(data[0], data[1]),
+		PROTO::merge8_int(data[2], data[3])
+	);
 }
 
 static void _cmdMouseRelativeEvent(const uint8_t *data) { // 2 bytes
-	if (_usb_mouse_rel) {
-		_usb_mouse_rel->sendRelative(data[0], data[1]);
-	}
+	_out.mouse->sendRelative(data[0], data[1]);
 }
 
 static void _cmdMouseWheelEvent(const uint8_t *data) { // 2 bytes
 	// Y only, X is not supported
-	if (_usb_mouse_abs) {
-		_usb_mouse_abs->sendWheel(data[1]);
-	} else if (_usb_mouse_rel) {
-		_usb_mouse_rel->sendWheel(data[1]);
-	}
+	_out.mouse->sendWheel(data[1]);
 }
 
 static uint8_t _handleRequest(const uint8_t *data) { // 8 bytes
@@ -284,13 +153,13 @@ static void _sendResponse(uint8_t code) {
 		}
 		response[2] = PROTO::OUTPUTS1::DYNAMIC;
 #		endif
-		if (_kbd->getType() != DRIVERS::DUMMY) {
-			response[1] |= (_kbd->isOffline() ? PROTO::PONG::KEYBOARD_OFFLINE : 0);
-			KeyboardLedsState leds = _kbd->getLeds();
+		if (_out.kbd->getType() != DRIVERS::DUMMY) {
+			response[1] |= (_out.kbd->isOffline() ? PROTO::PONG::KEYBOARD_OFFLINE : 0);
+			DRIVERS::KeyboardLedsState leds = _out.kbd->getLeds();
 			response[1] |= (leds.caps ? PROTO::PONG::CAPS : 0);
 			response[1] |= (leds.num ? PROTO::PONG::NUM : 0);
 			response[1] |= (leds.scroll ? PROTO::PONG::SCROLL : 0);
-			switch (_kbd->getType()) {
+			switch (_out.kbd->getType()) {
 				case DRIVERS::USB_KEYBOARD:
 					response[2] |= PROTO::OUTPUTS1::KEYBOARD::USB;
 					break;			
@@ -299,16 +168,19 @@ static void _sendResponse(uint8_t code) {
 					break;			
 			}	
 		}
-		if (_usb_mouse_abs) {
-			response[1] |= (_usb_mouse_abs->isOffline() ? PROTO::PONG::MOUSE_OFFLINE : 0);
-			if (_usb_mouse_abs->getType() == DRIVERS::USB_MOUSE_ABSOLUTE_WIN98) {
-				response[2] |= PROTO::OUTPUTS1::MOUSE::USB_WIN98;
-			} else {
-				response[2] |= PROTO::OUTPUTS1::MOUSE::USB_ABS;
+		if (_out.mouse->getType() != DRIVERS::DUMMY) {
+			response[1] |= (_out.mouse->isOffline() ? PROTO::PONG::MOUSE_OFFLINE : 0);
+			switch (_out.mouse->getType()) {
+				case DRIVERS::USB_MOUSE_ABSOLUTE_WIN98:
+					response[2] |= PROTO::OUTPUTS1::MOUSE::USB_WIN98;
+					break;
+				case DRIVERS::USB_MOUSE_ABSOLUTE:
+					response[2] |= PROTO::OUTPUTS1::MOUSE::USB_ABS;
+					break;
+				case DRIVERS::USB_MOUSE_RELATIVE:
+					response[2] |= PROTO::OUTPUTS1::MOUSE::USB_REL;
+					break;
 			}
-		} else if (_usb_mouse_rel) {
-			response[1] |= (_usb_mouse_rel->isOffline() ? PROTO::PONG::MOUSE_OFFLINE : 0);
-			response[2] |= PROTO::OUTPUTS1::MOUSE::USB_REL;
 		} // TODO: ps2
 #		ifdef AUM
 		response[3] |= PROTO::OUTPUTS2::CONNECTABLE;
@@ -337,10 +209,8 @@ static void _sendResponse(uint8_t code) {
 #	endif
 }
 
-int main() {
-	init(); // Embedded
-	initVariant(); // Arduino
-	_initOutputs();
+void setup() {
+	_out.initOutputs();
 
 #	ifdef AUM
 	aumInit();
@@ -348,41 +218,41 @@ int main() {
 
 #	ifdef CMD_SERIAL
 	CMD_SERIAL.begin(CMD_SERIAL_SPEED);
-	unsigned long last = micros();
-	uint8_t buffer[8];
-	uint8_t index = 0;
 #	elif defined(CMD_SPI)
 	spiBegin();
 #	endif
+}
 
-	while (true) {
-#		ifdef AUM
-		aumProxyUsbVbus();
-#		endif
+void loop() {
+#	ifdef AUM
+	aumProxyUsbVbus();
+#	endif
 
-		_kbd->periodic();
+	_out.kbd->periodic();
+	_out.mouse->periodic();
 
-#		ifdef CMD_SERIAL
-		if (CMD_SERIAL.available() > 0) {
-			buffer[index] = (uint8_t)CMD_SERIAL.read();
-			if (index == 7) {
-				_sendResponse(_handleRequest(buffer));
-				index = 0;
-			} else {
-				last = micros();
-				++index;
-			}
-		} else if (index > 0) {
-			if (is_micros_timed_out(last, CMD_SERIAL_TIMEOUT)) {
-				_sendResponse(PROTO::RESP::TIMEOUT_ERROR);
-				index = 0;
-			}
+#	ifdef CMD_SERIAL
+	static unsigned long last = micros();
+	static uint8_t buffer[8];
+	static uint8_t index = 0;
+	if (CMD_SERIAL.available() > 0) {
+		buffer[index] = (uint8_t)CMD_SERIAL.read();
+		if (index == 7) {
+			_sendResponse(_handleRequest(buffer));
+			index = 0;
+		} else /*if (buffer[0] == PROTO::MAGIC)*/ { // FIXME: See kvmd/kvmd#80
+			last = micros();
+			++index;
 		}
-#		elif defined(CMD_SPI)
-		if (spiReady()) {
-			_sendResponse(_handleRequest(spiGet()));
+	} else if (index > 0) {
+		if (is_micros_timed_out(last, CMD_SERIAL_TIMEOUT)) {
+			_sendResponse(PROTO::RESP::TIMEOUT_ERROR);
+			index = 0;
 		}
-#		endif
 	}
-	return 0;
+#	elif defined(CMD_SPI)
+	if (spiReady()) {
+		_sendResponse(_handleRequest(spiGet()));
+	}
+#	endif
 }

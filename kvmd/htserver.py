@@ -26,6 +26,7 @@ import asyncio
 import contextlib
 import dataclasses
 import inspect
+import urllib.parse
 import json
 
 from typing import Tuple
@@ -34,8 +35,10 @@ from typing import Dict
 from typing import Callable
 from typing import AsyncGenerator
 from typing import Optional
+from typing import Union
 from typing import Any
 
+from aiohttp import ClientWebSocketResponse
 from aiohttp.web import BaseRequest
 from aiohttp.web import Request
 from aiohttp.web import Response
@@ -185,8 +188,20 @@ def make_json_exception(err: Exception, status: Optional[int]=None) -> Response:
     }, status=status)
 
 
-async def start_streaming(request: Request, content_type: str="application/x-ndjson") -> StreamResponse:
-    response = StreamResponse(status=200, reason="OK", headers={"Content-Type": content_type})
+async def start_streaming(
+    request: Request,
+    content_type: str,
+    content_length: int=-1,
+    file_name: str="",
+) -> StreamResponse:
+
+    response = StreamResponse(status=200, reason="OK")
+    response.content_type = content_type
+    if content_length >= 0:
+        response.content_length = content_length
+    if file_name:
+        file_name = urllib.parse.quote(file_name, safe="")
+        response.headers["Content-Disposition"] = f"attachment; filename*=UTF-8''{file_name}"
     await response.prepare(request)
     return response
 
@@ -206,6 +221,18 @@ async def stream_json_exception(response: StreamResponse, err: Exception) -> Non
         "error": name,
         "error_msg": msg,
     }, False)
+
+
+async def send_ws_event(
+    wsr: Union[ClientWebSocketResponse, WebSocketResponse],
+    event_type: str,
+    event: Optional[Dict],
+) -> None:
+
+    await wsr.send_str(json.dumps({
+        "event_type": event_type,
+        "event": event,
+    }))
 
 
 def parse_ws_event(msg: str) -> Tuple[str, Dict]:
@@ -246,10 +273,7 @@ class WsSession:
         return f"WsSession(id={id(self)}, {self.kwargs})"
 
     async def send_event(self, event_type: str, event: Optional[Dict]) -> None:
-        await self.wsr.send_str(json.dumps({
-            "event_type": event_type,
-            "event": event,
-        }))
+        await send_ws_event(self.wsr, event_type, event)
 
 
 class HttpServer:
@@ -328,7 +352,7 @@ class HttpServer:
             await self._on_ws_opened()
             yield ws
         finally:
-            await self.__close_ws(ws)
+            await asyncio.shield(self.__close_ws(ws))
 
     async def _ws_loop(self, ws: WsSession) -> WebSocketResponse:
         logger = get_logger()

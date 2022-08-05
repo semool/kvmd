@@ -20,9 +20,19 @@ li(id="msd-dropdown" class="right feature-disabled")
 				| The device filesystem will be truncated to 2.2GiB
 			hr
 		div(id="msd-message-out-of-storage" class="hidden")
-			+menu_message("warning", "Current image is out of storag")
+			+menu_message("warning", "Current image is out of storage")
 				| This image was connected manually using #[b kvmd-otgmsd]
 			hr
+		div(id="msd-message-rw-enabled" class="hidden")
+			+menu_message("warning", "Read-write mode is enabled")
+				| Do not turn off PiKVM while this is active to prevent#[br]
+				| filesystem corruption. Use read-only mode where possible,#[br]
+				| as writing to SD card often can reduce its lifespan.
+			hr
+		div(id="msd-message-downloads" class="hidden")
+			hr
+			+menu_message("info", "The image is being downloaded from PiKVM")
+				| Please wait
 		table(class="kv msd-single-storage feature-disabled")
 			tr
 				td Current image:
@@ -37,7 +47,8 @@ li(id="msd-dropdown" class="right feature-disabled")
 			tr
 				td Image:
 				td(width="100%") #[select(disabled id="msd-image-selector")]
-				td #[button(disabled id="msd-remove-button") Remove]
+				td #[button(disabled id="msd-download-button" title="Download image") &nbsp;&nbsp;&#128426;&nbsp;&nbsp;]
+				td #[button(disabled id="msd-remove-button" title="Remove image") #[b &nbsp;&nbsp;&times;&nbsp;&nbsp;]]
 		table(class="kv msd-cdrom-emulation feature-disabled")
 			tr
 				td Drive #[a(target="_blank" href="https://docs.pikvm.org/msd") mode]:
@@ -47,6 +58,8 @@ li(id="msd-dropdown" class="right feature-disabled")
 						label(for="msd-mode-radio-cdrom") CD-ROM
 						input(type="radio" id="msd-mode-radio-flash" name="msd-mode-radio" value="0")
 						label(for="msd-mode-radio-flash") Flash
+				td &nbsp;
+				+menu_switch_notable("msd-rw-switch", "Writable", false, false, "msd-rw feature-disabled")
 		div(class="msd-multi-storage feature-disabled")
 			hr
 			div(class="text")

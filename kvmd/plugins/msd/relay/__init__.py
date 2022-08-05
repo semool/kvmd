@@ -49,8 +49,10 @@ from .. import MsdConnectedError
 from .. import MsdDisconnectedError
 from .. import MsdMultiNotSupported
 from .. import MsdCdromNotSupported
+from .. import MsdRwNotSupported
+from .. import BaseMsdReader
 from .. import BaseMsd
-from .. import MsdImageWriter
+from .. import MsdFileWriter
 
 from .gpio import Gpio
 
@@ -87,7 +89,7 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
         self.__device_info: Optional[DeviceInfo] = None
         self.__connected = False
 
-        self.__device_writer: Optional[MsdImageWriter] = None
+        self.__device_writer: Optional[MsdFileWriter] = None
 
         self.__notifier = aiotools.AioNotifier()
         self.__region = aiotools.AioExclusiveRegion(MsdIsBusyError, self.__notifier)
@@ -141,6 +143,7 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
             "features": {
                 "multi": False,
                 "cdrom": False,
+                "rw": False,
             },
         }
 
@@ -178,12 +181,20 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
     # =====
 
     @aiotools.atomic
-    async def set_params(self, name: Optional[str]=None, cdrom: Optional[bool]=None) -> None:
+    async def set_params(
+        self,
+        name: Optional[str]=None,
+        cdrom: Optional[bool]=None,
+        rw: Optional[bool]=None,
+    ) -> None:
+
         async with self.__working():
             if name is not None:
                 raise MsdMultiNotSupported()
             if cdrom is not None:
                 raise MsdCdromNotSupported()
+            if rw is not None:
+                raise MsdRwNotSupported()
 
     @aiotools.atomic
     async def set_connected(self, connected: bool) -> None:
@@ -208,27 +219,44 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
                 self.__connected = connected
 
     @contextlib.asynccontextmanager
-    async def write_image(self, name: str, size: int) -> AsyncGenerator[int, None]:
+    async def read_image(self, name: str) -> AsyncGenerator[BaseMsdReader, None]:
         async with self.__working():
+            if self is not None:  # XXX: Vulture and pylint hack
+                raise MsdMultiNotSupported()
+        yield BaseMsdReader()
+
+    @contextlib.asynccontextmanager
+    async def write_image(self, name: str, size: int, remove_incomplete: Optional[bool]) -> AsyncGenerator[MsdFileWriter, None]:
+        async with self.__working():
+            if remove_incomplete is not None:
+                raise MsdMultiNotSupported()
             async with self.__region:
                 try:
                     assert self.__device_info
                     if self.__connected:
                         raise MsdConnectedError()
 
-                    self.__device_writer = await MsdImageWriter(self.__device_info.path, size, self.__sync_chunk_size).open()
+                    self.__device_writer = await MsdFileWriter(
+                        notifier=self.__notifier,
+                        path=self.__device_info.path,
+                        file_size=size,
+                        sync_size=self.__sync_chunk_size,
+                        chunk_size=self.__upload_chunk_size,
+                    ).open()
 
                     await self.__write_image_info(False)
                     await self.__notifier.notify()
-                    yield self.__upload_chunk_size
+                    yield self.__device_writer
                     await self.__write_image_info(True)
                 finally:
-                    await self.__close_device_writer()
-                    await self.__load_device_info()
-
-    async def write_image_chunk(self, chunk: bytes) -> int:
-        assert self.__device_writer
-        return (await self.__device_writer.write(chunk))
+                    try:
+                        await asyncio.shield(self.__close_device_writer())
+                    except asyncio.CancelledError:
+                        pass
+                    try:
+                        await asyncio.shield(self.__load_device_info())
+                    except asyncio.CancelledError:
+                        pass
 
     @aiotools.atomic
     async def remove(self, name: str) -> None:
@@ -252,13 +280,8 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
             get_logger().error("Can't write image info because device is full")
 
     async def __close_device_writer(self) -> None:
-        try:
-            if self.__device_writer:
-                get_logger().info("Closing device file ...")
-                await self.__device_writer.close()  # type: ignore
-        except Exception:
-            get_logger().exception("Can't close device file")
-        finally:
+        if self.__device_writer:
+            await self.__device_writer.close()  # type: ignore
             self.__device_writer = None
 
     async def __load_device_info(self) -> None:

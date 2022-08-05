@@ -29,6 +29,8 @@ from typing import Optional
 from ... import aiotools
 
 from . import MsdOperationError
+from . import BaseMsdReader
+from . import BaseMsdWriter
 from . import BaseMsd
 
 
@@ -50,6 +52,7 @@ class Plugin(BaseMsd):
             "features": {
                 "multi": False,
                 "cdrom": False,
+                "rw": False,
             },
         }
 
@@ -63,20 +66,29 @@ class Plugin(BaseMsd):
 
     # =====
 
-    async def set_params(self, name: Optional[str]=None, cdrom: Optional[bool]=None) -> None:
+    async def set_params(
+        self,
+        name: Optional[str]=None,
+        cdrom: Optional[bool]=None,
+        rw: Optional[bool]=None,
+    ) -> None:
+
         raise MsdDisabledError()
 
     async def set_connected(self, connected: bool) -> None:
         raise MsdDisabledError()
 
     @contextlib.asynccontextmanager
-    async def write_image(self, name: str, size: int) -> AsyncGenerator[int, None]:
+    async def read_image(self, name: str) -> AsyncGenerator[BaseMsdReader, None]:
         if self is not None:  # XXX: Vulture and pylint hack
             raise MsdDisabledError()
-        yield 1
+        yield BaseMsdReader()
 
-    async def write_image_chunk(self, chunk: bytes) -> int:
-        raise MsdDisabledError()
+    @contextlib.asynccontextmanager
+    async def write_image(self, name: str, size: int, remove_incomplete: Optional[bool]) -> AsyncGenerator[BaseMsdWriter, None]:
+        if self is not None:  # XXX: Vulture and pylint hack
+            raise MsdDisabledError()
+        yield BaseMsdWriter()
 
     async def remove(self, name: str) -> None:
         raise MsdDisabledError()

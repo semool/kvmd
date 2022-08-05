@@ -20,64 +20,53 @@
 *****************************************************************************/
 
 
-#include "spi.h"
+#pragma once
 
-#include <Arduino.h>
-#include <SPI.h>
-
-
-static volatile uint8_t _spi_in[8] = {0};
-static volatile uint8_t _spi_in_index = 0;
-
-static volatile uint8_t _spi_out[8] = {0};
-static volatile uint8_t _spi_out_index = 0;
+#include <USBComposite.h>
 
 
-void spiBegin() {
-	pinMode(MISO, OUTPUT);
-	SPCR = (1 << SPE) | (1 << SPIE); // Slave, SPI En, IRQ En
-}
+namespace DRIVERS {
+	class HidWrapper {
+		public:
+			void begin() {
+				if (_init) {
+					return;
+				}
+				_init = true;
 
-bool spiReady() {
-	return (!_spi_out[0] && _spi_in_index == 8);
-}
+				_report_descriptor_length = 0;
+				for (unsigned index = 0; index < _count; ++index) {
+					_report_descriptor_length += _descriptors_size[index];
+				}
 
-const uint8_t *spiGet() {
-	return (const uint8_t *)_spi_in;
-}
+				_report_descriptor = new uint8[_report_descriptor_length];
 
-void spiWrite(const uint8_t *data) {
-	// Меджик в нулевом байте разрешает начать ответ
-	for (int index = 7; index >= 0; --index) {
-		_spi_out[index] = data[index];
-	}
-}
+				size_t offset = 0;
+				for (unsigned index = 0; index < _count; ++index) {
+					memcpy(_report_descriptor + offset, _report_descriptors[index], _descriptors_size[index]);
+					offset += _descriptors_size[index];
+				}
 
-
-ISR(SPI_STC_vect) {
-	uint8_t in = SPDR;
-	if (_spi_out[0] && _spi_out_index < 8) {
-		SPDR = _spi_out[_spi_out_index];
-		if (!(SPSR & (1 << WCOL))) {
-			++_spi_out_index;
-			if (_spi_out_index == 8) {
-				_spi_out_index = 0;
-				_spi_in_index = 0;
-				_spi_out[0] = 0;
+				usbHid.begin(_report_descriptor, _report_descriptor_length);
 			}
-		}
-	} else {
-		static bool receiving = false;
-		if (!receiving && in != 0) {
-			receiving = true;
-		}
-		if (receiving && _spi_in_index < 8) {
-			_spi_in[_spi_in_index] = in;
-			++_spi_in_index;
-		}
-		if (_spi_in_index == 8) {
-			receiving = false;
-		}
-		SPDR = 0;
-	}
+			
+			void addReportDescriptor(const uint8_t *report_descriptor, uint16_t report_descriptor_length) {
+				_report_descriptors[_count] = report_descriptor;
+				_descriptors_size[_count] = report_descriptor_length;
+				++_count;
+			}
+
+			USBHID usbHid;
+		
+		private:
+			bool _init = false;
+
+			static constexpr uint8_t MAX_USB_DESCRIPTORS = 2;
+			const uint8_t *_report_descriptors[MAX_USB_DESCRIPTORS];
+			uint8_t _descriptors_size[MAX_USB_DESCRIPTORS];
+
+			uint8_t _count = 0;
+			uint8_t *_report_descriptor;
+			uint16_t _report_descriptor_length;
+	};
 }

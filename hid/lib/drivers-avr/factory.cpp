@@ -20,12 +20,57 @@
 *****************************************************************************/
 
 
-#pragma once
+#include "usb/hid.h"
+#include "ps2/hid.h"
+#include "factory.h"
+#include "eeprom.h"
 
-#include <Arduino.h>
+#ifndef ARDUINO_ARCH_AVR
+#	error "Only AVR is supported"
+#endif
 
 
-void spiBegin();
-bool spiReady();
-const uint8_t *spiGet();
-void spiWrite(const uint8_t *data);
+namespace DRIVERS {
+	Keyboard *Factory::makeKeyboard(type _type) {
+		switch (_type) {
+#			ifdef HID_WITH_USB
+			case USB_KEYBOARD:
+				return new UsbKeyboard();
+#			endif
+
+#			ifdef HID_WITH_PS2
+			case PS2_KEYBOARD:
+				return new Ps2Keyboard();
+#			endif
+
+			default:
+				return new Keyboard(DUMMY);
+		}
+	}
+
+	Mouse *Factory::makeMouse(type _type) {
+		switch (_type) {
+#			ifdef HID_WITH_USB
+			case USB_MOUSE_ABSOLUTE:
+			case USB_MOUSE_ABSOLUTE_WIN98:
+				return new UsbMouseAbsolute(_type);
+			case USB_MOUSE_RELATIVE:
+				return new UsbMouseRelative();
+#			endif
+			default:
+				return new Mouse(DRIVERS::DUMMY);
+		}
+	}
+
+	Storage* Factory::makeStorage(type _type) {
+		switch (_type) {
+#			ifdef HID_DYNAMIC
+			case NON_VOLATILE_STORAGE:
+				return new Eeprom(DRIVERS::NON_VOLATILE_STORAGE);
+#			endif
+			default:
+				return new Storage(DRIVERS::DUMMY);
+        }
+	}
+
+}

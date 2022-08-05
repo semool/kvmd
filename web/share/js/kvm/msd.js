@@ -39,9 +39,12 @@ export function Msd() {
 		$("msd-led").title = "Unknown state";
 
 		$("msd-image-selector").onchange = __selectImage;
+		tools.el.setOnClick($("msd-download-button"), __clickDownloadButton);
 		tools.el.setOnClick($("msd-remove-button"), __clickRemoveButton);
 
 		tools.radio.setOnClick("msd-mode-radio", __clickModeRadio);
+
+		tools.el.setOnClick($("msd-rw-switch"), __clickRwSwitch);
 
 		tools.el.setOnClick($("msd-select-new-button"), __toggleSelectSub);
 		$("msd-new-file").onchange = __selectNewFile;
@@ -65,8 +68,14 @@ export function Msd() {
 
 	var __selectImage = function() {
 		tools.el.setEnabled($("msd-image-selector"), false);
+		tools.el.setEnabled($("msd-download-button"), false);
 		tools.el.setEnabled($("msd-remove-button"), false);
 		__sendParam("image", $("msd-image-selector").value);
+	};
+
+	var __clickDownloadButton = function() {
+		let name = $("msd-image-selector").value;
+		window.open(`/api/msd/read?image=${name}`);
 	};
 
 	var __clickRemoveButton = function() {
@@ -88,6 +97,10 @@ export function Msd() {
 		__sendParam("cdrom", tools.radio.getValue("msd-mode-radio"));
 	};
 
+	var __clickRwSwitch = function() {
+		__sendParam("rw", $("msd-rw-switch").checked);
+	};
+
 	var __sendParam = function(name, value) {
 		let http = tools.makeRequest("POST", `/api/msd/set_params?${name}=${encodeURIComponent(value)}`, function() {
 			if (http.readyState === 4) {
@@ -102,10 +115,10 @@ export function Msd() {
 		let file = tools.input.getFile($("msd-new-file"));
 		__http = new XMLHttpRequest();
 		if (file) {
-			__http.open("POST", `/api/msd/write?image=${encodeURIComponent(file.name)}`, true);
+			__http.open("POST", `/api/msd/write?image=${encodeURIComponent(file.name)}&remove_incomplete=1`, true);
 		} else {
 			let url = $("msd-new-url").value;
-			__http.open("POST", `/api/msd/write_remote?url=${encodeURIComponent(url)}`, true);
+			__http.open("POST", `/api/msd/write_remote?url=${encodeURIComponent(url)}&remove_incomplete=1`, true);
 		}
 		__http.upload.timeout = 7 * 24 * 3600;
 		__http.onreadystatechange = __httpStateChange;
@@ -238,10 +251,14 @@ export function Msd() {
 
 		tools.el.setEnabled($("msd-image-selector"), (online && s.features.multi && !s.drive.connected && !s.busy));
 		__applyStateImageSelector();
+		tools.el.setEnabled($("msd-download-button"), (online && s.features.multi && s.drive.image && !s.drive.connected && !s.busy));
 		tools.el.setEnabled($("msd-remove-button"), (online && s.features.multi && s.drive.image && !s.drive.connected && !s.busy));
 
 		tools.radio.setEnabled("msd-mode-radio", (online && s.features.cdrom && !s.drive.connected && !s.busy));
 		tools.radio.setValue("msd-mode-radio", `${Number(online && s.features.cdrom && s.drive.cdrom)}`);
+
+		tools.el.setEnabled($("msd-rw-switch"), (online && s.features.rw && !s.drive.connected && !s.busy));
+		$("msd-rw-switch").checked = (online && s.features.rw && s.drive.rw);
 
 		tools.el.setEnabled($("msd-connect-button"), (online && (!s.features.multi || s.drive.image) && !s.drive.connected && !s.busy));
 		tools.el.setEnabled($("msd-disconnect-button"), (online && s.drive.connected && !s.busy));
@@ -289,6 +306,9 @@ export function Msd() {
 			for (let el of $$$(".msd-cdrom-emulation")) {
 				tools.feature.setEnabled(el, s.features.cdrom);
 			}
+			for (let el of $$$(".msd-rw")) {
+				tools.feature.setEnabled(el, s.features.rw);
+			}
 		}
 
 		tools.hidden.setVisible($("msd-message-offline"), (s && !s.online));
@@ -298,8 +318,12 @@ export function Msd() {
 			(online && s.features.cdrom && s.drive.cdrom && s.drive.image && s.drive.image.size >= 2359296000));
 		tools.hidden.setVisible($("msd-message-out-of-storage"),
 			(online && s.features.multi && s.drive.image && !s.drive.image.in_storage));
+		tools.hidden.setVisible($("msd-message-rw-enabled"),
+			(online && s.features.rw && s.drive.rw));
 		tools.hidden.setVisible($("msd-message-another-user-uploads"),
 			(online && s.storage.uploading && !__http));
+		tools.hidden.setVisible($("msd-message-downloads"),
+			(online && s.features.multi && s.storage.downloading));
 	};
 
 	var __applyStateStatus = function() {
@@ -315,6 +339,9 @@ export function Msd() {
 		} else if (online && s.storage.uploading) {
 			led_cls = "led-yellow-rotating-fast";
 			msg = "Uploading new image";
+		} else if (online && s.features.multi && s.storage.downloading) {
+			led_cls = "led-yellow-rotating-fast";
+			msg = "Serving the image to download";
 		} else if (online) { // Sic!
 			msg = "Disconnected";
 		}
@@ -332,7 +359,7 @@ export function Msd() {
 			el.options.length = 1; // Cleanup
 			return;
 		}
-		if (!s.features.multi || s.storage.uploading) {
+		if (!s.features.multi || s.storage.uploading || s.storage.downloading) {
 			return;
 		}
 

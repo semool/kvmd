@@ -22,7 +22,10 @@
 
 import dataclasses
 
+from typing import List
+from typing import Dict
 from typing import FrozenSet
+from typing import Union
 from typing import Any
 
 
@@ -42,36 +45,46 @@ class RfbEncodings:
     H264 = 50  # Open H.264 Encoding
 
 
+def _make_meta(variants: Union[int, FrozenSet[int]]) -> Dict:
+    return {"variants": (frozenset([variants]) if isinstance(variants, int) else variants)}
+
+
 @dataclasses.dataclass(frozen=True)
 class RfbClientEncodings:  # pylint: disable=too-many-instance-attributes
     encodings: FrozenSet[int]
 
-    has_resize: bool = dataclasses.field(default=False)
-    has_rename: bool = dataclasses.field(default=False)
-    has_leds_state: bool = dataclasses.field(default=False)
-    has_ext_keys: bool = dataclasses.field(default=False)
+    has_resize: bool =		    dataclasses.field(default=False, metadata=_make_meta(RfbEncodings.RESIZE))  # noqa: E224
+    has_rename: bool =		    dataclasses.field(default=False, metadata=_make_meta(RfbEncodings.RENAME))  # noqa: E224
+    has_leds_state: bool =	    dataclasses.field(default=False, metadata=_make_meta(RfbEncodings.LEDS_STATE))  # noqa: E224
+    has_ext_keys: bool =	    dataclasses.field(default=False, metadata=_make_meta(RfbEncodings.EXT_KEYS))  # noqa: E224
 
-    has_tight: bool = dataclasses.field(default=False)
-    tight_jpeg_quality: int = dataclasses.field(default=0)
+    has_tight: bool =		    dataclasses.field(default=False, metadata=_make_meta(RfbEncodings.TIGHT))  # noqa: E224
+    tight_jpeg_quality: int =	dataclasses.field(default=0,     metadata=_make_meta(frozenset(RfbEncodings.TIGHT_JPEG_QUALITIES)))  # noqa: E224
 
-    has_h264: bool = dataclasses.field(default=False)
+    has_h264: bool =			dataclasses.field(default=False, metadata=_make_meta(RfbEncodings.H264))  # noqa: E224
+
+    def get_summary(self) -> List[str]:
+        summary: List[str] = [f"encodings -- {sorted(self.encodings)}"]
+        for field in dataclasses.fields(self):
+            if field.name != "encodings":
+                found = ", ".join(map(str, sorted(map(int, self.__get_found(field)))))
+                summary.append(f"{field.name} [{found}] -- {getattr(self, field.name)}")
+        return summary
 
     def __post_init__(self) -> None:
-        self.__set("has_resize", (RfbEncodings.RESIZE in self.encodings))
-        self.__set("has_rename", (RfbEncodings.RENAME in self.encodings))
-        self.__set("has_leds_state", (RfbEncodings.LEDS_STATE in self.encodings))
-        self.__set("has_ext_keys", (RfbEncodings.EXT_KEYS in self.encodings))
+        for field in dataclasses.fields(self):
+            if field.name != "encodings":
+                self.__set_value(field.name, bool(self.__get_found(field)))
+        self.__set_value("tight_jpeg_quality", self.__get_tight_jpeg_quality())
 
-        self.__set("has_tight", (RfbEncodings.TIGHT in self.encodings))
-        self.__set("tight_jpeg_quality", self.__get_tight_jpeg_quality())
-
-        self.__set("has_h264", (RfbEncodings.H264 in self.encodings))
-
-    def __set(self, key: str, value: Any) -> None:
+    def __set_value(self, key: str, value: Any) -> None:
         object.__setattr__(self, key, value)
 
+    def __get_found(self, field: dataclasses.Field) -> FrozenSet[int]:
+        return self.encodings.intersection(field.metadata["variants"])
+
     def __get_tight_jpeg_quality(self) -> int:
-        if RfbEncodings.TIGHT in self.encodings:
+        if self.has_tight:
             qualities = self.encodings.intersection(RfbEncodings.TIGHT_JPEG_QUALITIES)
             if qualities:
                 return RfbEncodings.TIGHT_JPEG_QUALITIES[max(qualities)]

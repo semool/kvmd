@@ -33,6 +33,7 @@ namespace DRIVERS {
 		USB_MOUSE_ABSOLUTE_WIN98,
 		USB_KEYBOARD,
 		PS2_KEYBOARD,
+		NON_VOLATILE_STORAGE,
 	};
 
 	class Driver {

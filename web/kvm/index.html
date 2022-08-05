@@ -390,7 +390,7 @@
                   <table>
                     <tr>
                       <td rowspan="2"><img class="sign " src="/share/svg/warning.svg"></td>
-                      <td style="line-height:1.5"><b>Current image is out of storag</b></td>
+                      <td style="line-height:1.5"><b>Current image is out of storage</b></td>
                     </tr>
                     <tr>
                       <td><sup style="line-height:1">This image was connected manually using <b>kvmd-otgmsd</b></sup></td>
@@ -398,6 +398,36 @@
                   </table>
                 </div>
             <hr>
+          </div>
+          <div class="hidden" id="msd-message-rw-enabled">
+                <div class="text">
+                  <table>
+                    <tr>
+                      <td rowspan="2"><img class="sign " src="/share/svg/warning.svg"></td>
+                      <td style="line-height:1.5"><b>Read-write mode is enabled</b></td>
+                    </tr>
+                    <tr>
+                      <td><sup style="line-height:1">Do not turn off PiKVM while this is active to prevent<br>
+                          filesystem corruption. Use read-only mode where possible,<br>
+                          as writing to SD card often can reduce its lifespan.</sup></td>
+                    </tr>
+                  </table>
+                </div>
+            <hr>
+          </div>
+          <div class="hidden" id="msd-message-downloads">
+            <hr>
+                <div class="text">
+                  <table>
+                    <tr>
+                      <td rowspan="2"><img class="sign " src="/share/svg/info.svg"></td>
+                      <td style="line-height:1.5"><b>The image is being downloaded from PiKVM</b></td>
+                    </tr>
+                    <tr>
+                      <td><sup style="line-height:1">Please wait</sup></td>
+                    </tr>
+                  </table>
+                </div>
           </div>
           <table class="kv msd-single-storage feature-disabled">
             <tr>
@@ -420,7 +450,10 @@
                 <select disabled id="msd-image-selector"></select>
               </td>
               <td>
-                <button disabled id="msd-remove-button">Remove</button>
+                <button disabled id="msd-download-button" title="Download image">&nbsp;&nbsp;&#128426;&nbsp;&nbsp;</button>
+              </td>
+              <td>
+                <button disabled id="msd-remove-button" title="Remove image"><b>&nbsp;&nbsp;&times;&nbsp;&nbsp;</b></button>
               </td>
             </tr>
           </table>
@@ -435,6 +468,14 @@
                   <label for="msd-mode-radio-flash">Flash</label>
                 </div>
               </td>
+              <td>&nbsp;</td>
+                  <td class="msd-rw feature-disabled">Writable:</td>
+                  <td class="msd-rw feature-disabled" align="right">
+                    <div class="switch-box">
+                      <input disabled type="checkbox" id="msd-rw-switch">
+                      <label for="msd-rw-switch"><span class="switch-inner"></span><span class="switch"></span></label>
+                    </div>
+                  </td>
             </tr>
           </table>
           <div class="msd-multi-storage feature-disabled">
@@ -699,12 +740,14 @@
     <div class="window window-resizable" id="stream-window">
       <div class="window-header" id="stream-window-header">
         <div class="window-grab">MJPEG</div>
-        <button class="window-button-close">&times;</button>
+        <button class="window-button-close"><b>&times;</b></button>
         <button class="window-button-maximize">&#9744;</button>
         <button class="window-button-original">&bull;</button>
+        <button class="window-button-enter-full-tab">&#9650;</button>
         <button class="window-button-full-screen">&#10530;</button>
       </div>
       <div id="stream-info"></div>
+      <button class="window-button-exit-full-tab">&#9660;</button>
       <div class="stream-box-offline" id="stream-box"><img id="stream-image" src="/share/png/blank-stream.png">
         <video class="hidden" id="stream-video" autoplay playsinline muted></video>
         <div id="stream-fullscreen-active"></div>
@@ -734,7 +777,7 @@
     <div class="window" id="keyboard-window">
       <div class="window-header" id="keyboard-window-header">
         <div class="window-grab">Virtual Keyboard</div>
-        <button class="window-button-close">&times;</button>
+        <button class="window-button-close"><b>&times;</b></button>
       </div>
       <div class="keypad" id="keyboard-desktop" align="center">
         <div class="keypad-block">
@@ -1581,7 +1624,7 @@
     <div class="window" id="about-window">
       <div class="window-header">
         <div class="window-grab">About</div>
-        <button class="window-button-close">&times;</button>
+        <button class="window-button-close"><b>&times;</b></button>
       </div>
       <div id="about">
         <table>
@@ -1630,6 +1673,7 @@
                   <ul>
                     <li>A. Isenring</li>
                     <li>Aaron Heise</li>
+                    <li>Aaron Stein</li>
                     <li>Accalia</li>
                     <li>Adam Goodbar</li>
                     <li>Adam S</li>
@@ -1666,6 +1710,7 @@
                     <li>Aron Green</li>
                     <li>Aron Perelman</li>
                     <li>Artem Simonov</li>
+                    <li>Arthur Mayer</li>
                     <li>Arthur Woimbée</li>
                     <li>Ashlesh Chaudhari</li>
                     <li>Augusto Becciu</li>
@@ -1685,6 +1730,7 @@
                     <li>Benjamin Stegmann</li>
                     <li>Benni Stauder</li>
                     <li>Bernhard Fitzke</li>
+                    <li>Beu</li>
                     <li>bikmaek</li>
                     <li>bitjoe</li>
                     <li>Bits and Bytes Computers LLC</li>
@@ -1722,6 +1768,7 @@
                     <li>Christopher Bulla</li>
                     <li>Christopher Hearn</li>
                     <li>Christopher Mandlbaur</li>
+                    <li>Christopher Mendoza</li>
                     <li>Christopher Simms</li>
                     <li>Chucktastic</li>
                     <li>Cihan VURAL</li>
@@ -1740,6 +1787,7 @@
                     <li>CyB0rgg</li>
                     <li>DeMentor</li>
                     <li>Desmond Whitt</li>
+                    <li>Daegara</li>
                     <li>DailyAneurism</li>
                     <li>Damon Meledones</li>
                     <li>Dan Berkowitz</li>
@@ -1830,6 +1878,7 @@
                     <li>Ivan Ganev</li>
                     <li>Ivan Josiah Lapis</li>
                     <li>Ivan Shapovalov</li>
+                    <li>J</li>
                     <li>J L</li>
                     <li>Jaanus</li>
                     <li>Jackson Wyatt</li>
@@ -1917,6 +1966,7 @@
                     <li>LeeNX</li>
                     <li>Leon Siegl</li>
                     <li>Leonard Feineis</li>
+                    <li>Liran</li>
                     <li>Liviu Dimitriu</li>
                     <li>Lizardo Hernandez</li>
                     <li>LoCascio</li>
@@ -1924,6 +1974,7 @@
                     <li>Lothar Schweikle-Droll</li>
                     <li>Louis Müller</li>
                     <li>LSDTripp</li>
+                    <li>Ľubor Slušný</li>
                     <li>Luca Di Diomede</li>
                     <li>Lucio De Carli</li>
                     <li>Lukas Bischof</li>
@@ -2022,9 +2073,11 @@
                     <li>Phil Wu</li>
                     <li>Philip Edwards</li>
                     <li>Philip Merricks</li>
+                    <li>Pierre Brassart</li>
                     <li>posicat</li>
                     <li>pozitron03</li>
                     <li>Przemysław Szypowicz</li>
+                    <li>P_Dmitrij</li>
                     <li>Qteal</li>
                     <li>Quattro Uno</li>
                     <li>Quentin Peten</li>
@@ -2035,6 +2088,7 @@
                     <li>Ref Chowdhury</li>
                     <li>René Rathenau</li>
                     <li>Ricardo Marques</li>
+                    <li>Richard</li>
                     <li>Richard Bernarts</li>
                     <li>Richard Fancher</li>
                     <li>Richard Freemantle</li>
@@ -2051,6 +2105,7 @@
                     <li>Ronald Wells</li>
                     <li>Ronny Haldorsen</li>
                     <li>rotx</li>
+                    <li>Rufo Sanchez</li>
                     <li>Russell Scott</li>
                     <li>Ryan Peacock</li>
                     <li>Samed Ozoglu</li>
@@ -2156,7 +2211,7 @@
     <div class="window window-resizable" id="webterm-window" style="width: 640px; height: 480px">
       <div class="window-header">
         <div class="window-grab">Terminal</div>
-        <button class="window-button-close">&times;</button>
+        <button class="window-button-close"><b>&times;</b></button>
         <button class="window-button-maximize">&#9744;</button>
         <!-- Терминал глючит из-за зажимаемой клавиши ESC для выхода-->
         <!-- button(class="window-button-full-screen") &#10530;-->

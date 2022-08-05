@@ -24,10 +24,11 @@ SpiDev.max_speed_hz
 
 _AtxApiPart.switch_power
 
+_UsbKey.arduino_modifier_code
+
 _KeyMapping.web_name
 _KeyMapping.mcu_code
-_KeyMapping.arduino_name
-_KeyMapping.otg_key
+_KeyMapping.usb_key
 _KeyMapping.ps2_key
 _KeyMapping.at1_code
 _KeyMapping.x11_keys
@@ -48,3 +49,6 @@ _Edid.set_product_id
 _Edid.set_serial
 _Edid.set_monitor_name
 _Edid.set_audio
+
+_auth_server_port_fixture
+_test_user

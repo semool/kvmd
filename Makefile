@@ -116,7 +116,8 @@ run: testenv $(TESTENV_GPIO)
 			--publish 8080:80/tcp \
 			--publish 4430:443/tcp \
 		-it $(TESTENV_IMAGE) /bin/bash -c " \
-			mount -t debugfs none /sys/kernel/debug \
+			mkdir -p /tmp/kvmd-nginx \
+			&& mount -t debugfs none /sys/kernel/debug \
 			&& test -d /sys/kernel/debug/gpio-mockup/`basename $(TESTENV_GPIO)`/ || (echo \"Missing GPIO mockup\" && exit 1) \
 			&& (socat PTY,link=$(TESTENV_HID) PTY,link=/dev/ttyS11 &) \
 			&& cp -r /usr/share/kvmd/configs.default/nginx/* /etc/kvmd/nginx \
@@ -206,8 +207,8 @@ keymap: testenv
 		--volume `pwd`:/src \
 	-it $(TESTENV_IMAGE) bash -c "cd src \
 		&& ./genmap.py keymap.csv kvmd/keyboard/mappings.py.mako kvmd/keyboard/mappings.py \
-		&& ./genmap.py keymap.csv hid/src/usb/keymap.h.mako hid/src/usb/keymap.h \
-		&& ./genmap.py keymap.csv hid/src/ps2/keymap.h.mako hid/src/ps2/keymap.h \
+		&& ./genmap.py keymap.csv hid/lib/drivers/usb-keymap.h.mako hid/lib/drivers/usb-keymap.h \
+		&& ./genmap.py keymap.csv hid/lib/drivers-avr/ps2/keymap.h.mako hid/lib/drivers-avr/ps2/keymap.h \
 	"
 
 
