@@ -121,13 +121,13 @@ class _State:
     async def busy(self, check_online: bool=True) -> AsyncGenerator[None, None]:
         async with self._region:
             async with self._lock:
-                await self.__notifier.notify()
+                self.__notifier.notify()
                 if check_online:
                     if self.vd is None:
                         raise MsdOfflineError()
                     assert self.storage
                 yield
-        await self.__notifier.notify()
+        self.__notifier.notify()
 
     def is_busy(self) -> bool:
         return self._region.is_busy()
@@ -173,7 +173,7 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
 
         logger = get_logger(0)
         logger.info("Using OTG gadget %r as MSD", gadget)
-        aiotools.run_sync(self.__reload_state())
+        aiotools.run_sync(self.__reload_state(notify=False))
 
     @classmethod
     def get_plugin_options(cls) -> Dict:
@@ -246,7 +246,7 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
     async def systask(self) -> None:
         await self.__watch_inotify()
 
-    @aiotools.atomic
+    @aiotools.atomic_fg
     async def reset(self) -> None:
         async with self.__state.busy(check_online=False):
             try:
@@ -257,14 +257,14 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
             except Exception:
                 get_logger(0).exception("Can't reset MSD properly")
 
-    @aiotools.atomic
+    @aiotools.atomic_fg
     async def cleanup(self) -> None:
         await self.__close_reader()
         await self.__close_writer()
 
     # =====
 
-    @aiotools.atomic
+    @aiotools.atomic_fg
     async def set_params(
         self,
         name: Optional[str]=None,
@@ -299,7 +299,7 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
                 if rw:
                     self.__state.vd.cdrom = False
 
-    @aiotools.atomic
+    @aiotools.atomic_fg
     async def set_connected(self, connected: bool) -> None:
         async with self.__state.busy():
             assert self.__state.vd
@@ -334,7 +334,7 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
             async with self.__state._region:  # pylint: disable=protected-access
                 try:
                     async with self.__state._lock:  # pylint: disable=protected-access
-                        await self.__notifier.notify()
+                        self.__notifier.notify()
                         assert self.__state.storage
                         assert self.__state.vd
 
@@ -354,17 +354,9 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
                     yield self.__reader
 
                 finally:
-                    # FIXME: Перехват важен потому что по какой-то причине await
-                    # во вложенных finally путаются и выполняются не по порядку
-                    try:
-                        await asyncio.shield(self.__close_reader())
-                    except asyncio.CancelledError:
-                        pass
+                    await aiotools.shield_fg(self.__close_reader())
         finally:
-            try:
-                await asyncio.shield(self.__notifier.notify())
-            except asyncio.CancelledError:
-                pass
+            self.__notifier.notify()
 
     @contextlib.asynccontextmanager
     async def write_image(self, name: str, size: int, remove_incomplete: Optional[bool]) -> AsyncGenerator[MsdFileWriter, None]:
@@ -373,7 +365,7 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
                 path: str = ""
                 try:
                     async with self.__state._lock:  # pylint: disable=protected-access
-                        await self.__notifier.notify()
+                        self.__notifier.notify()
                         assert self.__state.storage
                         assert self.__state.vd
 
@@ -395,7 +387,7 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
                             chunk_size=self.__write_chunk_size,
                         ).open()
 
-                    await self.__notifier.notify()
+                    self.__notifier.notify()
                     yield self.__writer
                     self.__set_image_complete(name, self.__writer.is_complete())
 
@@ -407,26 +399,15 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
                         except Exception:
                             pass
                     try:
-                        await asyncio.shield(self.__close_writer())
-                    except asyncio.CancelledError:
-                        pass
-                    try:
-                        await asyncio.shield(self.__remount_rw(False, fatal=False))
-                    except asyncio.CancelledError:
-                        pass
+                        await aiotools.shield_fg(self.__close_writer())
+                    finally:
+                        await aiotools.shield_fg(self.__remount_rw(False, fatal=False))
         finally:
             # Между закрытием файла и эвентом айнотифи состояние может быть не обновлено,
             # так что форсим обновление вручную, чтобы получить актуальное состояние.
-            try:
-                await asyncio.shield(self.__reload_state())
-            except asyncio.CancelledError:
-                pass
-            try:
-                await asyncio.shield(self.__notifier.notify())
-            except asyncio.CancelledError:
-                pass
+            await aiotools.shield_fg(self.__reload_state())
 
-    @aiotools.atomic
+    @aiotools.atomic_fg
     async def remove(self, name: str) -> None:
         async with self.__state.busy():
             assert self.__state.storage
@@ -470,7 +451,6 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
                 while True:
                     # Активно ждем, пока не будут на месте все каталоги.
                     await self.__reload_state()
-                    await self.__notifier.notify()
                     if self.__state.vd:
                         break
                     await asyncio.sleep(5)
@@ -483,7 +463,6 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
 
                     # После установки вотчеров еще раз проверяем стейт, чтобы ничего не потерять
                     await self.__reload_state()
-                    await self.__notifier.notify()
 
                     while self.__state.vd:  # Если живы после предыдущей проверки
                         need_restart = False
@@ -499,12 +478,11 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
                             break
                         if need_reload_state:
                             await self.__reload_state()
-                            await self.__notifier.notify()
             except Exception:
                 logger.exception("Unexpected MSD watcher error")
                 time.sleep(1)
 
-    async def __reload_state(self) -> None:
+    async def __reload_state(self, notify: bool=True) -> None:
         logger = get_logger(0)
         async with self.__state._lock:  # pylint: disable=protected-access
             try:
@@ -541,6 +519,8 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
                         self.__state.vd.image = None
 
                     self.__state.vd.connected = False
+        if notify:
+            self.__notifier.notify()
 
     async def __setup_initial(self) -> None:
         if self.__initial_image:

@@ -84,10 +84,51 @@ _RetvalT = TypeVar("_RetvalT")
 
 
 # =====
-def atomic(func: _FunctionT) -> _FunctionT:
+class _ArmoredFuture(asyncio.Future):
+    def cancel(self, *_, **__) -> bool:  # type: ignore
+        # FIXME: Выяснить, почему это работает
+        return False
+
+    def forced_cancel(self) -> bool:
+        return super().cancel()
+
+
+def shield_fg(aw: Awaitable):  # type: ignore
+    # XXX: Копия asyncio.shield() с небольшими изменениями
+
+    inner = asyncio.ensure_future(aw)
+    if inner.done():
+        return inner
+    outer = _ArmoredFuture(loop=inner.get_loop())
+
+    def inner_done(_) -> None:  # type: ignore
+        if outer.cancelled():
+            if not inner.cancelled():
+                inner.exception()  # Mark inner's result as retrieved
+            return
+
+        if inner.cancelled():
+            outer.forced_cancel()
+        else:
+            err = inner.exception()
+            if err is not None:
+                outer.set_exception(err)
+            else:
+                outer.set_result(inner.result())
+
+    def outer_done(_) -> None:  # type: ignore
+        if not inner.done():
+            inner.remove_done_callback(inner_done)
+
+    inner.add_done_callback(inner_done)
+    outer.add_done_callback(outer_done)
+    return outer
+
+
+def atomic_fg(func: _FunctionT) -> _FunctionT:
     @functools.wraps(func)
     async def wrapper(*args: Any, **kwargs: Any) -> Any:
-        return (await asyncio.shield(func(*args, **kwargs)))
+        return (await shield_fg(func(*args, **kwargs)))
     return typing.cast(_FunctionT, wrapper)
 
 
@@ -191,10 +232,7 @@ class AioNotifier:
     def __init__(self) -> None:
         self.__queue: "asyncio.Queue[None]" = asyncio.Queue()
 
-    async def notify(self) -> None:
-        await self.__queue.put(None)
-
-    def notify_sync(self) -> None:
+    def notify(self) -> None:
         self.__queue.put_nowait(None)
 
     async def wait(self, timeout: Optional[float]=None) -> None:
@@ -258,7 +296,7 @@ class AioExclusiveRegion:
             self.__busy = True
             try:
                 if self.__notifier:
-                    await self.__notifier.notify()
+                    self.__notifier.notify()
             except:  # noqa: E722
                 self.__busy = False
                 raise
@@ -268,7 +306,7 @@ class AioExclusiveRegion:
     async def exit(self) -> None:
         self.__busy = False
         if self.__notifier:
-            await self.__notifier.notify()
+            self.__notifier.notify()
 
     async def __aenter__(self) -> None:
         await self.enter()

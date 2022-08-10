@@ -20,7 +20,6 @@
 # ========================================================================== #
 
 
-import sys
 import asyncio
 import threading
 import dataclasses
@@ -107,7 +106,7 @@ class AioReader:  # pylint: disable=too-many-instance-attributes
                 )
                 for (pin, value) in zip(pins, lines.get_values())
             }
-            self.__loop.call_soon_threadsafe(self.__notifier.notify_sync)
+            self.__loop.call_soon_threadsafe(self.__notifier.notify)
 
             while not self.__stop_event.is_set():
                 ev_lines = lines.event_wait(1)
@@ -147,8 +146,7 @@ class _DebouncedValue:
         self.__notifier = notifier
         self.__loop = loop
 
-        queue_kwargs = ({"loop": loop} if sys.version_info < (3, 10) else {})
-        self.__queue: "asyncio.Queue[bool]" = asyncio.Queue(**queue_kwargs)  # type: ignore
+        self.__queue: "asyncio.Queue[bool]" = asyncio.Queue()  # type: ignore
         self.__task = loop.create_task(self.__consumer_task_loop())
 
     def set(self, value: bool) -> None:
@@ -170,5 +168,5 @@ class _DebouncedValue:
                 value = await self.__queue.get()
             if self.__value != value:
                 self.__value = value
-                await self.__notifier.notify()
+                self.__notifier.notify()
             await asyncio.sleep(self.__debounce)

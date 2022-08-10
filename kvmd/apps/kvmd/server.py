@@ -213,20 +213,20 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
                 value = validator(value)  # type: ignore
                 if current_params[name] != value:
                     self.__new_streamer_params[name] = value
-        await self.__streamer_notifier.notify()
+        self.__streamer_notifier.notify()
         return make_json_response()
 
     @exposed_http("POST", "/streamer/reset")
     async def __streamer_reset_handler(self, _: Request) -> Response:
         self.__reset_streamer = True
-        await self.__streamer_notifier.notify()
+        self.__streamer_notifier.notify()
         return make_json_response()
 
     # ===== WEBSOCKET
 
     @exposed_http("GET", "/ws")
     async def __ws_handler(self, request: Request) -> WebSocketResponse:
-        stream = valid_bool(request.query.get("stream", "true"))
+        stream = valid_bool(request.query.get("stream", True))
         async with self._ws_session(request, stream=stream) as ws:
             stage1 = [
                 ("gpio_model_state", self.__user_gpio.get_model()),
@@ -299,11 +299,11 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
         logger.info("On-Cleanup complete")
 
     async def _on_ws_opened(self) -> None:
-        await self.__streamer_notifier.notify()
+        self.__streamer_notifier.notify()
 
     async def _on_ws_closed(self) -> None:
         self.__hid.clear_events()
-        await self.__streamer_notifier.notify()
+        self.__streamer_notifier.notify()
 
     def __has_stream_clients(self) -> bool:
         return bool(sum(map(

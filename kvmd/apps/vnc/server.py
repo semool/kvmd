@@ -147,7 +147,7 @@ class _Client(RfbClient):  # pylint: disable=too-many-instance-attributes
                 fb_sender=self.__fb_sender_task_loop(),
             )
         finally:
-            await asyncio.shield(self.__cleanup())
+            await aiotools.shield_fg(self.__cleanup())
 
     async def __cleanup(self) -> None:
         if self.__kvmd_session:
@@ -294,7 +294,7 @@ class _Client(RfbClient):  # pylint: disable=too-many-instance-attributes
 
                 if len(last["data"]) == 0:
                     # Вдруг какой-то баг
-                    await self.__fb_notifier.notify()
+                    self.__fb_notifier.notify()
                     continue
 
                 if last["format"] == StreamFormats.JPEG:
@@ -305,7 +305,7 @@ class _Client(RfbClient):  # pylint: disable=too-many-instance-attributes
                     if has_h264_key:
                         await self._send_fb_h264(last["data"])
                     else:
-                        await self.__fb_notifier.notify()
+                        self.__fb_notifier.notify()
                 else:
                     raise RuntimeError(f"Unknown format: {last['format']}")
                 last["data"] = b""
@@ -406,7 +406,7 @@ class _Client(RfbClient):  # pylint: disable=too-many-instance-attributes
         await self.__kvmd_session.streamer.set_params(quality, self.__desired_fps)
 
     async def _on_fb_update_request(self) -> None:
-        await self.__fb_notifier.notify()
+        self.__fb_notifier.notify()
 
 
 # =====
@@ -498,7 +498,7 @@ class VncServer:  # pylint: disable=too-many-instance-attributes
             except Exception:
                 logger.exception("%s [entry]: Unhandled exception in client task", remote)
             finally:
-                await asyncio.shield(cleanup_client(writer))
+                await aiotools.shield_fg(cleanup_client(writer))
 
         self.__handle_client = handle_client
 
