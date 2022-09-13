@@ -73,4 +73,10 @@ namespace DRIVERS {
         }
 	}
 
+	Board* Factory::makeBoard(type _type) {
+		switch (_type) {
+			default:
+				return new Board(DRIVERS::DUMMY);
+        }
+	}
 }
