@@ -29,7 +29,7 @@ for _variant in "${_variants[@]}"; do
 	pkgname+=(kvmd-platform-$_platform-$_board)
 done
 pkgbase=kvmd
-pkgver=3.149
+pkgver=3.159
 pkgrel=1
 pkgdesc="The main PiKVM daemon"
 url="https://github.com/pikvm/kvmd"
@@ -78,7 +78,7 @@ depends=(
 	"janus-gateway-pikvm>=0.11.2-7"
 	certbot
 	platform-io-access
-	"ustreamer>=5.8"
+	"ustreamer>=5.26"
 
 	# Systemd UDEV bug
 	"systemd>=248.3-2"

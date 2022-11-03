@@ -344,14 +344,15 @@ function __WindowManager() {
 
 	var __globalMouseButtonHandler = function(event) {
 		if (
-			event.target.matches && !event.target.matches(".menu-button")
-			&& event.target.closest && !event.target.closest(".modal")
+			event.target.closest
+			&& !event.target.closest(".menu-button")
+			&& !event.target.closest(".modal")
 		) {
 			for (let el_item = event.target; el_item && el_item !== document; el_item = el_item.parentNode) {
-				if (el_item.hasAttribute("data-force-hide-menu")) {
-					break;
-				} else if (el_item.hasAttribute("data-dont-hide-menu")) {
+				if (el_item.classList.contains("menu")) {
 					return;
+				} else if (el_item.hasAttribute("data-force-hide-menu")) {
+					break;
 				}
 			}
 			__closeAllMenues();
@@ -362,6 +363,12 @@ function __WindowManager() {
 	var __organizeWindowsOnBrowserResize = function() {
 		for (let el_window of $$("window")) {
 			if (el_window.style.visibility === "visible") {
+				if (tools.browser.is_mobile && el_window.classList.contains("window-resizable")) {
+					// FIXME: При смене ориентации на мобильном браузере надо сбрасывать
+					// настройки окна стрима, поэтому тут стоит вот этот костыль
+					el_window.style.width = "";
+					el_window.style.height = "";
+				}
 				__organizeWindow(el_window);
 			}
 		}
