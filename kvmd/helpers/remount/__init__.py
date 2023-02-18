@@ -22,23 +22,10 @@
 
 import sys
 import os
-import re
 import shutil
-import dataclasses
 import subprocess
 
-
-# ====
-_MOUNT_PATH = "/bin/mount"
-_FSTAB_PATH = "/etc/fstab"
-
-
-# =====
-@dataclasses.dataclass(frozen=True)
-class _Storage:
-    mount_path: str
-    root_path: str
-    user: str
+from ... import fstab
 
 
 # =====
@@ -46,29 +33,11 @@ def _log(msg: str) -> None:
     print(msg, file=sys.stderr)
 
 
-def _find_storage(target: str) -> _Storage:
-    assert target
-    with open(_FSTAB_PATH) as fstab_file:
-        for line in fstab_file.read().split("\n"):
-            line = line.strip()
-            if line and not line.startswith("#"):
-                parts = line.split()
-                if len(parts) == 6:
-                    options = dict(re.findall(r"X-kvmd\.%s-(root|user)(?:=([^,]+))?" % (target), parts[3]))
-                    if options:
-                        return _Storage(
-                            mount_path=parts[1],
-                            root_path=(options.get("root", "") or parts[1]),
-                            user=options.get("user", ""),
-                        )
-    raise SystemExit(f"Can't find {target!r} mountpoint in {_FSTAB_PATH}")
-
-
 def _remount(path: str, rw: bool) -> None:
     mode = ("rw" if rw else "ro")
     _log(f"Remounting {path} to {mode.upper()}-mode ...")
     try:
-        subprocess.check_call([_MOUNT_PATH, "--options", f"remount,{mode}", path])
+        subprocess.check_call(["/bin/mount", "--options", f"remount,{mode}", path])
     except subprocess.CalledProcessError as err:
         raise SystemExit(f"Can't remount: {err}")
 
@@ -95,26 +64,27 @@ def main() -> None:
     if len(sys.argv) != 2 or sys.argv[1] not in ["ro", "rw"]:
         raise SystemExit(f"Usage: {sys.argv[0]} [ro|rw]")
 
-    target = ""
+    finder = None
     dirs: list[str] = []
     app = os.path.basename(sys.argv[0])
     if app == "kvmd-helper-otgmsd-remount":
-        target = "otgmsd"
+        finder = fstab.find_msd
         dirs = ["images", "meta"]
     elif app == "kvmd-helper-pst-remount":
-        target = "pst"
+        finder = fstab.find_pst
         dirs = ["data"]
     else:
         raise SystemExit("Unknown application target")
 
     rw = (sys.argv[1] == "rw")
 
-    storage = _find_storage(target)
-    _remount(storage.mount_path, rw)
-    if rw and storage.root_path:
+    assert finder is not None
+    part = finder()
+    _remount(part.mount_path, rw)
+    if rw and part.root_path:
         for name in dirs:
-            path = os.path.join(storage.root_path, name)
+            path = os.path.join(part.root_path, name)
             _mkdir(path)
-            if storage.user:
-                _chown(path, storage.user)
+            if part.user:
+                _chown(path, part.user)
     _log(f"Storage in the {'RW' if rw else 'RO'}-mode now")

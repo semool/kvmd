@@ -365,6 +365,12 @@ def _get_config_scheme() -> dict:
                     "type": Option("", type=valid_stripped_string),
                     # Dynamic content
                 },
+
+                "totp": {
+                    "secret": {
+                        "file": Option("/etc/kvmd/totp.secret", type=valid_abs_path, if_empty=""),
+                    },
+                },
             },
 
             "info": {  # Accessed via global config, see kvmd/info for details
@@ -500,7 +506,6 @@ def _get_config_scheme() -> dict:
                                             " referer='%{Referer}i'; user_agent='%{User-Agent}i'"),
             },
 
-            "storage":          Option("/var/lib/kvmd/pst", type=valid_abs_dir, unpack_as="storage_path"),
             "ro_retries_delay": Option(10.0, type=valid_float_f01),
             "ro_cleanup_delay": Option(3.0,  type=valid_float_f01),
 
@@ -724,7 +729,7 @@ def _get_config_scheme() -> dict:
                 "--plugins-folder=/usr/lib/ustreamer/janus",
                 "--configs-folder=/etc/kvmd/janus",
                 "--interface={src_ip}",
-                "--stun-server={stun_host}:{stun_port}",
+                "{o_stun_server}",
             ], type=valid_command),
             "cmd_remove": Option([], type=valid_options),
             "cmd_append": Option([], type=valid_options),

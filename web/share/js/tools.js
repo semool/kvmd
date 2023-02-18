@@ -184,8 +184,16 @@ export var tools = new function() {
 					el.__display_callback = display_callback;
 				}
 			},
-			"setValue": function(el, value) {
+			"setRange": function(el, min, max) {
+				let value = el.value;
+				el.min = min;
+				el.max = max;
 				if (el.value != value) {
+					self.slider.setValue(el, el.value, true);
+				}
+			},
+			"setValue": function(el, value, force=false) {
+				if (el.value != value || force) {
 					if (el.__pressed) {
 						el.__postponed = value;
 					} else {
@@ -335,6 +343,16 @@ export var tools = new function() {
 					self.storage.setBool(key, el.checked);
 				}, false);
 			},
+		};
+	};
+
+	self.config = new function() {
+		return {
+			"get": function(key, default_value) {
+				let value = window.getComputedStyle(document.documentElement).getPropertyValue(`--config-ui--${key}`);
+				return (value || default_value);
+			},
+			"getBool": (key, default_value) => !!parseInt(self.config.get(key, (default_value ? "1" : "0"))),
 		};
 	};
 

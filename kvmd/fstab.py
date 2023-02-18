@@ -20,37 +20,52 @@
 # ========================================================================== #
 
 
-import os
+import re
 import dataclasses
 
-from ....logging import get_logger
+from . import env
 
 
 # =====
 @dataclasses.dataclass(frozen=True)
-class FsSpace:
-    size: int
-    free: int
+class Partition:
+    mount_path: str
+    root_path: str
+    user: str
 
 
 # =====
-def get_file_size(path: str) -> int:
-    try:
-        return os.path.getsize(path)
-    except Exception as err:
-        get_logger().warning("Can't get size of file %s: %s", path, err)
-        return -1
+def find_msd() -> Partition:
+    return _find_single("otgmsd")
 
 
-def get_fs_space(path: str, fatal: bool) -> (FsSpace | None):
-    try:
-        st = os.statvfs(path)
-    except Exception as err:
-        if fatal:
-            raise
-        get_logger().warning("Can't get free space of filesystem %s: %s", path, err)
-        return None
-    return FsSpace(
-        size=(st.f_blocks * st.f_frsize),
-        free=(st.f_bavail * st.f_frsize),
-    )
+def find_pst() -> Partition:
+    return _find_single("pst")
+
+
+# =====
+def _find_single(part_type: str) -> Partition:
+    parts = _find_partitions(part_type, True)
+    if len(parts) == 0:
+        raise RuntimeError(f"Can't find {part_type!r} mountpoint")
+    return parts[0]
+
+
+def _find_partitions(part_type: str, single: bool) -> list[Partition]:
+    parts: list[Partition] = []
+    with open(f"{env.ETC_PREFIX}/etc/fstab") as file:
+        for line in file.read().split("\n"):
+            line = line.strip()
+            if line and not line.startswith("#"):
+                fields = line.split()
+                if len(fields) == 6:
+                    options = dict(re.findall(r"X-kvmd\.%s-(root|user)(?:=([^,]+))?" % (part_type), fields[3]))
+                    if options:
+                        parts.append(Partition(
+                            mount_path=fields[1],
+                            root_path=(options.get("root", "") or fields[1]),
+                            user=options.get("user", ""),
+                        ))
+                        if single:
+                            break
+    return parts

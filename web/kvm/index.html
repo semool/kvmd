@@ -202,6 +202,13 @@
               </td>
               <td class="value-number" id="stream-h264-bitrate-value"></td>
             </tr>
+            <tr class="feature-disabled" id="stream-h264-gop">
+              <td>H.264 <a target="_blank" href="https://docs.pikvm.org/webrtc">gop</a>:</td>
+              <td class="value-slider">
+                <input class="slider" disabled type="range" id="stream-h264-gop-slider">
+              </td>
+              <td class="value-number" id="stream-h264-gop-value"></td>
+            </tr>
             <tr>
               <td>Max FPS:</td>
               <td class="value-slider">
@@ -256,7 +263,7 @@
             <div class="spoiler">
               <table class="kv">
                 <tr>
-                  <td>Polling rate:</td>
+                  <td>Polling interval:</td>
                   <td class="value-slider">
                     <input class="slider" type="range" id="hid-mouse-rate-slider">
                   </td>
@@ -315,6 +322,15 @@
                 <div class="switch-box">
                   <input class="gpio-switch" disabled type="checkbox" id="gpio-switch-__v3_usb_breaker__" data-channel="__v3_usb_breaker__" data-confirm-off="Turning off this switch will disconnect the main USB&lt;br&gt;from the server. Are you sure you want to continue?">
                   <label for="gpio-switch-__v3_usb_breaker__"><span class="switch-inner"></span><span class="switch"></span></label>
+                </div>
+              </td>
+            </tr>
+            <tr class="feature-disabled" id="v4-locator">
+              <td>Enable locator LED:</td>
+              <td align="right">
+                <div class="switch-box">
+                  <input class="gpio-switch" disabled type="checkbox" id="gpio-switch-__v4_locator__" data-channel="__v4_locator__">
+                  <label for="gpio-switch-__v4_locator__"><span class="switch-inner"></span><span class="switch"></span></label>
                 </div>
               </td>
             </tr>
@@ -446,21 +462,7 @@
                 </div>
             <hr>
           </div>
-          <table class="kv msd-single-storage feature-disabled">
-            <tr>
-              <td>Current image:</td>
-              <td class="value" id="msd-image-name"></td>
-            </tr>
-            <tr>
-              <td>Image size:</td>
-              <td class="value" id="msd-image-size"></td>
-            </tr>
-            <tr>
-              <td>Storage size:</td>
-              <td class="value" id="msd-storage-size"></td>
-            </tr>
-          </table>
-          <table class="kv msd-multi-storage feature-disabled">
+          <table class="kv">
             <tr>
               <td>Image:</td>
               <td width="100%">
@@ -495,11 +497,9 @@
                   </td>
             </tr>
           </table>
-          <div class="msd-multi-storage feature-disabled">
-            <hr>
-            <div class="text">
-              <div class="progress" id="msd-storage-progress"><span class="progress-value" id="msd-storage-progress-value"></span></div>
-            </div>
+          <hr>
+          <div class="text">
+            <div class="progress" id="msd-storage-progress"><span class="progress-value" id="msd-storage-progress-value"></span></div>
           </div>
           <hr>
           <div class="buttons buttons-row">
@@ -613,10 +613,10 @@
         </div>
       </li>
       <li class="right" id="text-dropdown"><a class="menu-button" href="#"><img class="feature-disabled" id="stream-ocr-led" src="/share/svg/led-gear.svg"><span>Text</span></a>
-        <div class="menu">
+        <div class="menu" id="text-menu">
           <div class="text"><b>Paste text as keypress sequence<br></b><sub>Please note that PiKVM cannot switch the keyboard layout</sub></div>
           <hr>
-          <div class="text">
+          <div class="text" style="margin-right: 20px">
             <textarea id="hid-pak-text" placeholder="Enter your text here"></textarea>
           </div>
           <table class="kv">
@@ -708,6 +708,11 @@
               <button class="row50" data-force-hide-menu data-shortcut="AltLeft F4">&bull; Alt+F4</button>
             </div>
             <hr>
+            <div class="buttons-row">
+              <button class="row50" data-force-hide-menu data-shortcut="ControlLeft AltLeft F1">&bull; Ctrl+Alt+F1</button>
+              <button class="row50" data-force-hide-menu data-shortcut="ControlLeft AltLeft F2">&bull; Ctrl+Alt+F2</button>
+            </div>
+            <hr>
             <button data-force-hide-menu data-shortcut="ControlLeft AltLeft Delete">&bull; Ctrl+Alt+Del</button>
           </div>
           <hr>
@@ -791,6 +796,13 @@
             </div>
             <div class="key wide-3 right rounded-right" data-code="right">
               <div class="label">Right</div>
+            </div>
+            <div class="empty" style="width:30px"></div>
+            <div class="key small rounded-left" data-code="up">
+              <div class="label">Up</div>
+            </div>
+            <div class="key small rounded-right" data-code="down">
+              <div class="label">Down</div>
             </div>
           </div>
         </div>
@@ -947,7 +959,7 @@
                   <div class="label">+<br>=
                   </div>
                 </div>
-                <div class="spacer-fixed"></div>
+                <div class="spacer"></div>
                 <div class="key wide-1 right" data-code="Backspace">
                   <div class="label">&#8612;
                   </div>
@@ -958,7 +970,7 @@
                   <div class="label">&#8676;<br>&#8677;
                   </div>
                 </div>
-                <div class="spacer-fixed"></div>
+                <div class="spacer"></div>
                 <div class="key single" data-code="KeyQ">
                   <div class="label">Q
                   </div>
@@ -1029,7 +1041,7 @@
                   <div class="label"><img class="inline-lamp hid-keyboard-caps-led led-gray" src="/share/svg/led-square.svg"><br> Caps Lock
                   </div>
                 </div>
-                <div class="spacer-fixed"></div>
+                <div class="spacer"></div>
                 <div class="key single" data-code="KeyA">
                   <div class="label">A
                   </div>
@@ -1084,7 +1096,7 @@
                   <div class="label">"<br>'
                   </div>
                 </div>
-                <div class="spacer-fixed"></div>
+                <div class="spacer"></div>
                 <div class="key wide-2 right small" data-code="Enter">
                   <div class="label">Enter<br>&crarr;
                   </div>
@@ -1095,7 +1107,7 @@
                   <div class="label"><b>&bull;</b><br>Shift
                   </div>
                 </div>
-                <div class="spacer-fixed"></div>
+                <div class="spacer"></div>
                 <div class="key single" data-code="KeyZ">
                   <div class="label">Z
                   </div>
@@ -1145,7 +1157,7 @@
                   <div class="label">?<br>/
                   </div>
                 </div>
-                <div class="spacer-fixed"></div>
+                <div class="spacer"></div>
                 <div class="modifier wide-3 right small" data-code="ShiftRight">
                   <div class="label"><b>&bull;</b><br>Shift
                   </div>
@@ -1179,6 +1191,11 @@
                 <div class="spacer-fixed"></div>
                 <div class="modifier wide-1 right small" data-code="MetaRight">
                   <div class="label"><b>&bull;</b><br>Win
+                  </div>
+                </div>
+                <div class="spacer-fixed"></div>
+                <div class="key small" data-code="ContextMenu">
+                  <div class="label"><br>Menu
                   </div>
                 </div>
                 <div class="spacer-fixed"></div>
@@ -1276,14 +1293,12 @@
                   <div class="label">&nbsp;</div>
                 </div>
                 <div class="spacer-fixed"></div>
-                <div class="key small" data-code="IntlYen">
-                  <div class="label">Yen
-                  </div>
+                <div class="empty small">
+                  <div class="label">&nbsp;</div>
                 </div>
                 <div class="spacer-fixed"></div>
-                <div class="key small" data-code="IntlBackslash">
-                  <div class="label">N/US
-                  </div>
+                <div class="empty small">
+                  <div class="label">&nbsp;</div>
                 </div>
                 <div class="spacer-fixed"></div>
                 <div class="key small" data-code="Power">
@@ -1391,6 +1406,45 @@
                 <div class="spacer-fixed"></div>
                 <div class="key small" data-code="NumpadEnter">
                   <div class="label">Ent
+                  </div>
+                </div>
+          </div>
+        </div>
+        <div class="keypad-block">
+          <div class="keypad-row">
+                <div class="key small" data-code="IntlBackslash">
+                  <div class="label">&bsol;<br>|
+                  </div>
+                </div>
+          </div>
+          <hr>
+          <div class="keypad-row">
+                <div class="key small" data-code="IntlYen">
+                  <div class="label">¥<br>_
+                  </div>
+                </div>
+          </div>
+          <div class="keypad-row">
+                <div class="key small" data-code="IntlRo">
+                  <div class="label">&bsol;<br>ろ
+                  </div>
+                </div>
+          </div>
+          <div class="keypad-row">
+                <div class="modifier small" data-code="KanaMode">
+                  <div class="label"><b>&bull;</b><br>Kana
+                  </div>
+                </div>
+          </div>
+          <div class="keypad-row">
+                <div class="modifier small" data-code="NonConvert">
+                  <div class="label"><b>&bull;</b><br>N/Cnv
+                  </div>
+                </div>
+          </div>
+          <div class="keypad-row">
+                <div class="modifier small" data-code="Convert">
+                  <div class="label"><b>&bull;</b><br>Cnv
                   </div>
                 </div>
           </div>
@@ -1800,6 +1854,11 @@
                   </div>
                 </div>
                 <div class="spacer"></div>
+                <div class="key small" data-code="ContextMenu">
+                  <div class="label"><br>Menu
+                  </div>
+                </div>
+                <div class="spacer"></div>
                 <div class="modifier right small" data-code="ShiftRight">
                   <div class="label"><b>&bull;</b><br>Shift
                   </div>
@@ -1876,7 +1935,8 @@
                     // for their help, and memorializing their names<br>
                     // is the least we can do in gratitude.<br>
                     // If you also want to support this project,<br>
-                    // you can donate on <a target="_blank" href="https://www.patreon.com/pikvm">Patreon</a>.</span>
+                    // you can donate on <a target="_blank" href="https://www.patreon.com/pikvm">Patreon</a>
+                    or <a target="_blank" href="https://paypal.me/pikvm">Paypal</a>.</span>
                   <ul>
                     <li>A. Isenring</li>
                     <li>Aaron Graubert</li>
@@ -1970,6 +2030,7 @@
                     <li>CHINATERA LIMITED</li>
                     <li>Chris Blackmon</li>
                     <li>Chris Burton</li>
+                    <li>Chris Campbell</li>
                     <li>Chris Jackson</li>
                     <li>Chris Lewis</li>
                     <li>Chris Rizio</li>
@@ -2033,6 +2094,7 @@
                     <li>dixon wong</li>
                     <li>dizztrukshin</li>
                     <li>Dmitry Shilov</li>
+                    <li>DogeLabs</li>
                     <li>Dominic Phoon</li>
                     <li>Dominik Klonowski</li>
                     <li>Egan Ford</li>
@@ -2154,6 +2216,7 @@
                     <li>Jordan Blake</li>
                     <li>Jordi Pakey-Rodriguez</li>
                     <li>Joris van Embden</li>
+                    <li>Joseph Swift</li>
                     <li>Josh Nethery</li>
                     <li>Josh Ricker</li>
                     <li>Joshua Futterer</li>
@@ -2166,11 +2229,14 @@
                     <li>Justin Waters</li>
                     <li>Kai Hadler</li>
                     <li>Kamil Chyba</li>
+                    <li>Kari Matti Korpi</li>
                     <li>Karl Dunne</li>
+                    <li>Karl Moos</li>
                     <li>Keith Muggleton</li>
                     <li>Ken Lee</li>
                     <li>Kenneth Younger III</li>
                     <li>Kenny Hui</li>
+                    <li>KeonWoo PARK</li>
                     <li>Kevin Bajohr</li>
                     <li>Kevin Schwartz</li>
                     <li>Kevin Sherwood</li>
@@ -2233,6 +2299,7 @@
                     <li>Mecky</li>
                     <li>Mehmet Aydoğdu</li>
                     <li>Michael Bartholomew</li>
+                    <li>Michael Bell</li>
                     <li>Michael Bombe</li>
                     <li>Michael Collins</li>
                     <li>Michael Copeland</li>
@@ -2242,6 +2309,7 @@
                     <li>Michael Pennington</li>
                     <li>Michael Sage</li>
                     <li>Michael Thalmann</li>
+                    <li>Michael Wu</li>
                     <li>MichaelZ</li>
                     <li>Michel Bissonnette</li>
                     <li>Mikael Wikström</li>
@@ -2252,6 +2320,7 @@
                     <li>Moez Tharani</li>
                     <li>Morgan Helton</li>
                     <li>Myron Weber</li>
+                    <li>N Patel</li>
                     <li>Nathaniel Griswold</li>
                     <li>Nelson Lee</li>
                     <li>Nicholas Jeppson</li>
@@ -2295,6 +2364,7 @@
                     <li>Philip Edwards</li>
                     <li>Philip Merricks</li>
                     <li>Pierre Brassart</li>
+                    <li>Pierre Peine</li>
                     <li>posicat</li>
                     <li>pozitron03</li>
                     <li>Przemysław Szypowicz</li>
@@ -2329,6 +2399,7 @@
                     <li>rotx</li>
                     <li>Rufo Sanchez</li>
                     <li>Russell Scott</li>
+                    <li>Ryan</li>
                     <li>Ryan Peacock</li>
                     <li>Samed Ozoglu</li>
                     <li>Sameul Davies</li>
@@ -2348,6 +2419,7 @@
                     <li>Seonwoo Lee</li>
                     <li>Sergey Lukjanov</li>
                     <li>Seth Jennings</li>
+                    <li>Shane Selling</li>
                     <li>Shawn Butts</li>
                     <li>Sheran Gunasekera</li>
                     <li>Shichun Chen</li>
@@ -2355,6 +2427,7 @@
                     <li>Simon Evans</li>
                     <li>Simon Sundgaard</li>
                     <li>Simplistic Realities</li>
+                    <li>Snowy Maslov</li>
                     <li>Solve Technology</li>
                     <li>srepac</li>
                     <li>Stefan Bautz</li>

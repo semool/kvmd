@@ -236,23 +236,20 @@ export function Msd() {
 		let s = __state;
 		let online = (s && s.online);
 
-		$("msd-image-name").innerHTML = ((online && s.drive.image) ? s.drive.image.name : "None");
-		$("msd-image-size").innerHTML = ((online && s.drive.image) ? tools.formatSize(s.drive.image.size) : "None");
 		if (online) {
 			let size_str = tools.formatSize(s.storage.size);
 			let used = s.storage.size - s.storage.free;
 			let used_str = tools.formatSize(used);
-			$("msd-storage-size").innerHTML = size_str;
-			tools.progress.setValue($("msd-storage-progress"), `Storage: ${used_str} of ${size_str}`, used / s.storage.size * 100);
+			let percent = used / s.storage.size * 100;
+			tools.progress.setValue($("msd-storage-progress"), `Storage: ${used_str} of ${size_str}`, percent);
 		} else {
-			$("msd-storage-size").innerHTML = "Unavailable";
 			tools.progress.setValue($("msd-storage-progress"), "Storage: unavailable", 0);
 		}
 
-		tools.el.setEnabled($("msd-image-selector"), (online && s.features.multi && !s.drive.connected && !s.busy));
+		tools.el.setEnabled($("msd-image-selector"), (online && !s.drive.connected && !s.busy));
 		__applyStateImageSelector();
-		tools.el.setEnabled($("msd-download-button"), (online && s.features.multi && s.drive.image && !s.drive.connected && !s.busy));
-		tools.el.setEnabled($("msd-remove-button"), (online && s.features.multi && s.drive.image && !s.drive.connected && !s.busy));
+		tools.el.setEnabled($("msd-download-button"), (online && s.drive.image && !s.drive.connected && !s.busy));
+		tools.el.setEnabled($("msd-remove-button"), (online && s.drive.image && !s.drive.connected && !s.busy));
 
 		tools.radio.setEnabled("msd-mode-radio", (online && s.features.cdrom && !s.drive.connected && !s.busy));
 		tools.radio.setValue("msd-mode-radio", `${Number(online && s.features.cdrom && s.drive.cdrom)}`);
@@ -260,7 +257,7 @@ export function Msd() {
 		tools.el.setEnabled($("msd-rw-switch"), (online && s.features.rw && !s.drive.connected && !s.busy));
 		$("msd-rw-switch").checked = (online && s.features.rw && s.drive.rw);
 
-		tools.el.setEnabled($("msd-connect-button"), (online && (!s.features.multi || s.drive.image) && !s.drive.connected && !s.busy));
+		tools.el.setEnabled($("msd-connect-button"), (online && s.drive.image && !s.drive.connected && !s.busy));
 		tools.el.setEnabled($("msd-disconnect-button"), (online && s.drive.connected && !s.busy));
 
 		tools.el.setEnabled($("msd-select-new-button"), (online && !s.drive.connected && !__http && !s.busy));
@@ -297,12 +294,6 @@ export function Msd() {
 		if (s) {
 			tools.feature.setEnabled($("msd-dropdown"), s.enabled);
 			tools.feature.setEnabled($("msd-reset-button"), s.enabled);
-			for (let el of $$$(".msd-single-storage")) {
-				tools.feature.setEnabled(el, !s.features.multi);
-			}
-			for (let el of $$$(".msd-multi-storage")) {
-				tools.feature.setEnabled(el, s.features.multi);
-			}
 			for (let el of $$$(".msd-cdrom-emulation")) {
 				tools.feature.setEnabled(el, s.features.cdrom);
 			}
@@ -317,13 +308,13 @@ export function Msd() {
 		tools.hidden.setVisible($("msd-message-too-big-for-cdrom"),
 			(online && s.features.cdrom && s.drive.cdrom && s.drive.image && s.drive.image.size >= 2359296000));
 		tools.hidden.setVisible($("msd-message-out-of-storage"),
-			(online && s.features.multi && s.drive.image && !s.drive.image.in_storage));
+			(online && s.drive.image && !s.drive.image.in_storage));
 		tools.hidden.setVisible($("msd-message-rw-enabled"),
 			(online && s.features.rw && s.drive.rw));
 		tools.hidden.setVisible($("msd-message-another-user-uploads"),
 			(online && s.storage.uploading && !__http));
 		tools.hidden.setVisible($("msd-message-downloads"),
-			(online && s.features.multi && s.storage.downloading));
+			(online && s.storage.downloading));
 	};
 
 	var __applyStateStatus = function() {
@@ -339,7 +330,7 @@ export function Msd() {
 		} else if (online && s.storage.uploading) {
 			led_cls = "led-yellow-rotating-fast";
 			msg = "Uploading new image";
-		} else if (online && s.features.multi && s.storage.downloading) {
+		} else if (online && s.storage.downloading) {
 			led_cls = "led-yellow-rotating-fast";
 			msg = "Serving the image to download";
 		} else if (online) { // Sic!
@@ -359,28 +350,29 @@ export function Msd() {
 			el.options.length = 1; // Cleanup
 			return;
 		}
-		if (!s.features.multi || s.storage.uploading || s.storage.downloading) {
+		if (s.storage.uploading || s.storage.downloading) {
 			return;
 		}
 
 		if (el.options.length === 0) {
-			el.options[0] = new Option("~ Not selected ~", "", false, false);
+			el.options[0] = new Option("\u2500 Not selected \u2500", "", false, false);
 		} else {
 			el.options.length = 1;
 		}
 
-		let precom = "\xA0\xA0\xA0\xA0\xA0\u21b3";
 		let selected_index = 0;
 		let index = 1;
 
 		for (let name of Object.keys(s.storage.images).sort()) {
 			let image = s.storage.images[name];
 
-			let separator = new Option("\u2500".repeat(30), false, false);
-			separator.disabled = true;
-			separator.className = "comment";
-			el.options[index] = separator;
-			++index;
+			if (!tools.browser.is_mobile) {
+				let separator = new Option("\u2500".repeat(30), false, false);
+				separator.disabled = true;
+				separator.className = "comment";
+				el.options[index] = separator;
+				++index;
+			}
 
 			let option = new Option(name, name, false, false);
 			el.options[index] = option;
@@ -389,20 +381,34 @@ export function Msd() {
 			}
 			++index;
 
-			let comment = new Option(`${precom} ${tools.formatSize(image.size)}${image.complete ? "" : ", broken"}`, "", false, false);
-			comment.disabled = true;
-			comment.className = "comment";
-			el.options[index] = comment;
+			el.options[index] = __makeImageSelectorInfo(image);
 			++index;
 		}
 
 		if (s.drive.image && !s.drive.image.in_storage) {
 			el.options[index] = new Option(s.drive.image.name, "", false, false);
-			el.options[index + 1] = new Option(`${precom} ${tools.formatSize(s.drive.image.size)}, out of storage`, "", false, false);
+			el.options[index + 1] = __makeImageSelectorInfo(s.drive.image);
 			selected_index = el.options.length - 2;
 		}
 
 		el.selectedIndex = selected_index;
+	};
+
+	var __makeImageSelectorInfo = function(image) {
+		let title = `\xA0\xA0\xA0\xA0\xA0\u2570 ${tools.formatSize(image.size)}`;
+		title += (image.complete ? "" : ", broken");
+		if (image.in_storage !== undefined && !image.in_storage) {
+			title += ", out of storage";
+		}
+
+		let dt = new Date(image.mod_ts * 1000);
+		dt = new Date(dt.getTime() - (dt.getTimezoneOffset() * 60000));
+		title += " \u2500 " + dt.toISOString().slice(0, -8).replaceAll("-", ".").replace("T", "-");
+
+		let el = new Option(title, "", false, false);
+		el.disabled = true;
+		el.className = "comment";
+		return el;
 	};
 
 	__init__();

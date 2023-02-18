@@ -19,6 +19,9 @@ _variants=(
 	v2-hdmiusb:generic
 
 	v3-hdmi:rpi4
+
+	v4mini-hdmi:rpi4
+	v4plus-hdmi:rpi4
 )
 
 
@@ -29,7 +32,7 @@ for _variant in "${_variants[@]}"; do
 	pkgname+=(kvmd-platform-$_platform-$_board)
 done
 pkgbase=kvmd
-pkgver=3.161
+pkgver=3.199
 pkgrel=1
 pkgdesc="The main PiKVM daemon"
 url="https://github.com/pikvm/kvmd"
@@ -42,6 +45,8 @@ depends=(
 	"python-aiohttp>=3.7.4.post0-1.1"
 	python-aiofiles
 	python-passlib
+	python-pyotp
+	python-qrcode
 	python-periphery
 	python-pyserial
 	python-pyserial-asyncio
@@ -78,7 +83,7 @@ depends=(
 	"janus-gateway-pikvm>=0.11.2-7"
 	certbot
 	platform-io-access
-	"ustreamer>=5.29"
+	"ustreamer>=5.32"
 
 	# Systemd UDEV bug
 	"systemd>=248.3-2"
@@ -90,6 +95,9 @@ depends=(
 	# Avoid dhcpcd stack trace
 	dhclient
 	netctl
+
+	# Possible hotfix for the new os update
+	openssl-1.1
 
 	# Bootconfig
 	dos2unix
@@ -115,6 +123,7 @@ md5sums=(SKIP)
 backup=(
 	etc/kvmd/{override,logging,auth,meta}.yaml
 	etc/kvmd/{ht,ipmi,vnc}passwd
+	etc/kvmd/totp.secret
 	etc/kvmd/nginx/{kvmd.ctx-{http,server},certbot.ctx-server}.conf
 	etc/kvmd/nginx/listen-http{,s}.conf
 	etc/kvmd/nginx/loc-{login,nocache,proxy,websocket,nobuffering,bigpost}.conf
@@ -156,6 +165,7 @@ package_kvmd() {
 	find "$pkgdir" -name ".gitignore" -delete
 	find "$_cfg_default" -type f -exec chmod 444 '{}' \;
 	chmod 400 "$_cfg_default/kvmd"/*passwd
+	chmod 400 "$_cfg_default/kvmd"/*.secret
 	chmod 750 "$_cfg_default/os/sudoers"
 	chmod 400 "$_cfg_default/os/sudoers"/*
 
@@ -170,6 +180,7 @@ package_kvmd() {
 
 	install -Dm644 -t "$pkgdir/etc/kvmd" "$_cfg_default/kvmd"/*.yaml
 	install -Dm600 -t "$pkgdir/etc/kvmd" "$_cfg_default/kvmd"/*passwd
+	install -Dm600 -t "$pkgdir/etc/kvmd" "$_cfg_default/kvmd"/*.secret
 	install -Dm644 -t "$pkgdir/etc/kvmd" "$_cfg_default/kvmd"/web.css
 	mkdir -p "$pkgdir/etc/kvmd/override.d"
 
@@ -225,7 +236,7 @@ for _variant in "${_variants[@]}"; do
 
 		if [[ $_platform =~ ^.*-hdmi$ ]]; then
 			backup=(\"\${backup[@]}\" etc/kvmd/tc358743-edid.hex)
-			install -DTm444 configs/kvmd/tc358743-edid.hex \"\$pkgdir/etc/kvmd/tc358743-edid.hex\"
+			install -DTm444 configs/kvmd/edid/$_platform.hex \"\$pkgdir/etc/kvmd/tc358743-edid.hex\"
 		fi
 	}"
 done
