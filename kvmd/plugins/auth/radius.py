@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2022  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -426,8 +426,8 @@ class Plugin(BaseAuthService):
         assert user == user.strip()
         assert user
         try:
-            with io.StringIO(_FREERADUIS_DICT) as dct_file:
-                dct = pyrad.dictionary.Dictionary(dct_file)
+            with io.StringIO(_FREERADUIS_DICT) as file:
+                dct = pyrad.dictionary.Dictionary(file)
             client = pyrad.client.Client(
                 server=self.__host,
                 authport=self.__port,

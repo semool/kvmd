@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2022  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -535,7 +535,17 @@ def _get_config_scheme() -> dict:
             "meta": Option("/run/kvmd/otg", type=valid_abs_path),
 
             "devices": {
+                "hid": {
+                    "keyboard": {
+                        "start": Option(True, type=valid_bool),
+                    },
+                    "mouse": {
+                        "start": Option(True, type=valid_bool),
+                    },
+                },
+
                 "msd": {
+                    "start": Option(True, type=valid_bool),
                     "default": {
                         "stall":     Option(False, type=valid_bool),
                         "cdrom":     Option(True,  type=valid_bool),
@@ -547,10 +557,12 @@ def _get_config_scheme() -> dict:
 
                 "serial": {
                     "enabled": Option(False, type=valid_bool),
+                    "start":   Option(True,  type=valid_bool),
                 },
 
                 "ethernet": {
                     "enabled":  Option(False, type=valid_bool),
+                    "start":    Option(True,  type=valid_bool),
                     "driver":   Option("ecm", type=valid_otg_ethernet),
                     "host_mac": Option("",    type=valid_mac, if_empty=""),
                     "kvm_mac":  Option("",    type=valid_mac, if_empty=""),
@@ -558,6 +570,7 @@ def _get_config_scheme() -> dict:
 
                 "drives": {
                     "enabled": Option(False, type=valid_bool),
+                    "start":   Option(True,  type=valid_bool),
                     "count":   Option(1,     type=valid_int_f1),
                     "default": {
                         "stall":     Option(False, type=valid_bool),

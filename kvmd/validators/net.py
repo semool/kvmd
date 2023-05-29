@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2022  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -111,7 +111,7 @@ def valid_ssl_ciphers(arg: Any) -> str:
     name = "SSL ciphers"
     arg = valid_stripped_string_not_empty(arg, name)
     try:
-        ssl.SSLContext(ssl.PROTOCOL_TLS).set_ciphers(arg)
+        ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER).set_ciphers(arg)
     except Exception as err:
         raise ValidatorError(f"The argument {arg!r} is not a valid {name}: {err}")
     return arg

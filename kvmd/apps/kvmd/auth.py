@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2022  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -77,8 +77,8 @@ class AuthManager:
         assert self.__internal_service
 
         if self.__totp_secret_path:
-            with open(self.__totp_secret_path) as secret_file:
-                secret = secret_file.read().strip()
+            with open(self.__totp_secret_path) as file:
+                secret = file.read().strip()
             if secret:
                 code = passwd[-6:]
                 if not pyotp.TOTP(secret).verify(code):

@@ -3,7 +3,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2022  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -117,8 +117,8 @@ def _parse_ps2_key(key: str) -> _Ps2Key:
 
 def _read_keymap_csv(path: str) -> list[_KeyMapping]:
     keymap: list[_KeyMapping] = []
-    with open(path) as keymap_file:
-        for row in csv.DictReader(keymap_file):
+    with open(path) as file:
+        for row in csv.DictReader(file):
             if len(row) >= 6:
                 keymap.append(_KeyMapping(
                     web_name=row["web_name"],

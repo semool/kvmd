@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2022  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -215,6 +215,8 @@ export function Session() {
 			${state.kernel.system} kernel:
 			${__formatUname(state.kernel)}
 		`;
+		$("kvmd-version-kvmd").innerHTML = state.kvmd.version;
+		$("kvmd-version-streamer").innerHTML = state.streamer.version;
 	};
 
 	var __formatStreamerFeatures = function(features) {

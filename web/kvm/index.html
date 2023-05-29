@@ -4,7 +4,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2022  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -294,6 +294,22 @@
                         </div>
                       </td>
                 </tr>
+                <tr>
+                      <td>Cumulative scrolling:</td>
+                      <td align="right">
+                        <div class="switch-box">
+                          <input type="checkbox" id="hid-mouse-cumulative-scrolling-switch">
+                          <label for="hid-mouse-cumulative-scrolling-switch"><span class="switch-inner"></span><span class="switch"></span></label>
+                        </div>
+                      </td>
+                </tr>
+                <tr>
+                  <td>Scroll rate:</td>
+                  <td class="value-slider">
+                    <input class="slider" type="range" id="hid-mouse-scroll-slider">
+                  </td>
+                  <td class="value-number" id="hid-mouse-scroll-value"></td>
+                </tr>
               </table>
             </div>
           </details>
@@ -476,7 +492,7 @@
               </td>
             </tr>
           </table>
-          <table class="kv msd-cdrom-emulation feature-disabled">
+          <table class="kv">
             <tr>
               <td>Drive <a target="_blank" href="https://docs.pikvm.org/msd">mode</a>:</td>
               <td>
@@ -488,8 +504,8 @@
                 </div>
               </td>
               <td>&nbsp;</td>
-                  <td class="msd-rw feature-disabled">Writable:</td>
-                  <td class="msd-rw feature-disabled" align="right">
+                  <td>Writable:</td>
+                  <td align="right">
                     <div class="switch-box">
                       <input disabled type="checkbox" id="msd-rw-switch">
                       <label for="msd-rw-switch"><span class="switch-inner"></span><span class="switch"></span></label>
@@ -498,9 +514,7 @@
             </tr>
           </table>
           <hr>
-          <div class="text">
-            <div class="progress" id="msd-storage-progress"><span class="progress-value" id="msd-storage-progress-value"></span></div>
-          </div>
+          <div id="msd-storages"></div>
           <hr>
           <div class="buttons buttons-row">
             <button class="row50" disabled id="msd-select-new-button">Select image to upload</button>
@@ -531,6 +545,12 @@
                 <td><b>Or</b> paste a URL:</td>
                 <td>
                   <input type="text" id="msd-new-url" style="width: 100%">
+                </td>
+              </tr>
+              <tr class="hidden" id="msd-new-part">
+                <td>Upload partition:</td>
+                <td width="100%">
+                  <select id="msd-new-part-selector"></select>
                 </td>
               </tr>
             </table>
@@ -617,7 +637,7 @@
           <div class="text"><b>Paste text as keypress sequence<br></b><sub>Please note that PiKVM cannot switch the keyboard layout</sub></div>
           <hr>
           <div class="text" style="margin-right: 20px">
-            <textarea id="hid-pak-text" placeholder="Enter your text here"></textarea>
+            <textarea id="hid-pak-text" data-focus placeholder="Enter your text here"></textarea>
           </div>
           <table class="kv">
             <tr>
@@ -1902,7 +1922,7 @@
                   <td class="title" colspan="2">The Open Source IP-KVM</td>
                 </tr>
                 <tr>
-                  <td class="copyright" colspan="2">Copyright &copy; 2018-2022 <a target="_blank" href="mailto:mdevaev@gmail.com">Maxim Devaev</a></td>
+                  <td class="copyright" colspan="2">Copyright &copy; 2018-2023 <a target="_blank" href="mailto:mdevaev@gmail.com">Maxim Devaev</a></td>
                 </tr>
               </table>
             </td>
@@ -1945,6 +1965,7 @@
                     <li>Accalia</li>
                     <li>Adam Goodbar</li>
                     <li>Adam S</li>
+                    <li>Adam Stuart</li>
                     <li>adipisicing</li>
                     <li>Adrian Basham</li>
                     <li>Ahmed Syed</li>
@@ -2088,6 +2109,7 @@
                     <li>Dennis Becker</li>
                     <li>Dennis Joslin</li>
                     <li>Dennis Lomet</li>
+                    <li>Derek Jarvis</li>
                     <li>Derek Yap</li>
                     <li>Didrik</li>
                     <li>Dimitrij Jedich</li>
@@ -2219,6 +2241,7 @@
                     <li>Joseph Swift</li>
                     <li>Josh Nethery</li>
                     <li>Josh Ricker</li>
+                    <li>Josh VanDeraa</li>
                     <li>Joshua Futterer</li>
                     <li>Jozef Riha</li>
                     <li>Jörgen Fredriksson</li>
@@ -2248,6 +2271,7 @@
                     <li>Lance Ward</li>
                     <li>Larry Meaney</li>
                     <li>Lars</li>
+                    <li>Lars Reinhardt</li>
                     <li>Lee Wilkinson</li>
                     <li>LeeNX</li>
                     <li>Leon Siegl</li>
@@ -2288,6 +2312,7 @@
                     <li>Marshall Bjerke</li>
                     <li>Marten Hermans</li>
                     <li>Martin Gasser</li>
+                    <li>Martin Raine</li>
                     <li>Martin Suelmann</li>
                     <li>Martin Wilhelmi</li>
                     <li>Marvin Honderboom</li>
@@ -2378,6 +2403,7 @@
                     <li>Raphael Schitz</li>
                     <li>Ref Chowdhury</li>
                     <li>René Rathenau</li>
+                    <li>ReysDad</li>
                     <li>Ricardo Marques</li>
                     <li>Richard</li>
                     <li>Richard Bernarts</li>
@@ -2479,6 +2505,7 @@
                     <li>Vicente Salvador Cubedo</li>
                     <li>Viktor Aschenbrenner</li>
                     <li>Viktor Ekmark</li>
+                    <li>Vincent Chov</li>
                     <li>Vlad Sterescu</li>
                     <li>Volker Gropp</li>
                     <li>Walli</li>
@@ -2519,7 +2546,7 @@
       <iframe id="webterm-iframe" src="" style="width: 100%; height: 100%"></iframe>
     </div>
     <ul class="footer">
-      <li class="footer-left" id="kvmd-meta-server-host"></li>
+      <li class="footer-left"><span id="kvmd-meta-server-host" title="Server name (see System/About)"></span>&nbsp; | &nbsp;<span id="kvmd-version-kvmd" title="KVMD version"></span>&nbsp; | &nbsp;<span id="kvmd-version-streamer" title="Streamer version"></span></li>
       <li class="footer-right"><a target="_blank" href="https://pikvm.org">PiKVM Project</a>&nbsp; | &nbsp;<a target="_blank" href="https://docs.pikvm.org">Documentation</a>&nbsp; | &nbsp;<a target="_blank" href="https://pikvm.org/support">Support</a></li>
     </ul>
   </body>

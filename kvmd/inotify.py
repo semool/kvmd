@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2022  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This source file is partially based on python-watchdog module.          #
 #                                                                            #
@@ -34,6 +34,7 @@ from typing import Generator
 
 from .logging import get_logger
 
+from . import aiotools
 from . import libc
 
 
@@ -189,13 +190,15 @@ class Inotify:
 
         self.__events_queue: "asyncio.Queue[InotifyEvent]" = asyncio.Queue()
 
-    def watch(self, path: str, mask: int) -> None:
-        path = os.path.normpath(path)
-        assert path not in self.__wd_by_path, path
-        get_logger().info("Watching for %s", path)
-        wd = _inotify_check(libc.inotify_add_watch(self.__fd, _fs_encode(path), mask))
-        self.__wd_by_path[path] = wd
-        self.__path_by_wd[wd] = path
+    async def watch(self, mask: int, *paths: str) -> None:
+        for path in paths:
+            path = os.path.normpath(path)
+            assert path not in self.__wd_by_path, path
+            get_logger().info("Watching for %s", path)
+            # Асинхронно, чтобы не висло на NFS
+            wd = _inotify_check(await aiotools.run_async(libc.inotify_add_watch, self.__fd, _fs_encode(path), mask))
+            self.__wd_by_path[path] = wd
+            self.__path_by_wd[wd] = path
 
 #    def unwatch(self, path: str) -> None:
 #        path = os.path.normpath(path)
@@ -212,7 +215,10 @@ class Inotify:
     async def get_event(self, timeout: float) -> (InotifyEvent | None):
         assert timeout > 0
         try:
-            return (await asyncio.wait_for(self.__events_queue.get(), timeout=timeout))
+            return (await asyncio.wait_for(
+                asyncio.ensure_future(self.__events_queue.get()),
+                timeout=timeout,
+            ))
         except asyncio.TimeoutError:
             return None
 

@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2022  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -41,7 +41,14 @@ def valid_atx_button(arg: Any) -> str:
 
 
 def valid_msd_image_name(arg: Any) -> str:
-    return valid_printable_filename(arg, name="MSD image name")  # pragma: nocover
+    name = "MSD image name"
+    arg = valid_stripped_string_not_empty(arg, name)
+    parts: list[str] = list(filter(None, arg.split("/")))
+    if len(parts) == 0:
+        raise_error(arg, name)
+    for (index, part) in enumerate(list(parts)):
+        parts[index] = valid_printable_filename(part, name=name)
+    return "/".join(parts)
 
 
 def valid_info_fields(arg: Any, variants: set[str]) -> set[str]:

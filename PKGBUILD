@@ -32,17 +32,17 @@ for _variant in "${_variants[@]}"; do
 	pkgname+=(kvmd-platform-$_platform-$_board)
 done
 pkgbase=kvmd
-pkgver=3.199
+pkgver=3.221
 pkgrel=1
 pkgdesc="The main PiKVM daemon"
 url="https://github.com/pikvm/kvmd"
 license=(GPL)
 arch=(any)
 depends=(
-	"python>=3.10"
-	"python<3.11"
+	"python>=3.11"
+	"python<3.12"
 	python-yaml
-	"python-aiohttp>=3.7.4.post0-1.1"
+	python-aiohttp
 	python-aiofiles
 	python-passlib
 	python-pyotp
@@ -60,11 +60,13 @@ depends=(
 	python-pygments
 	python-pyghmi
 	python-pam
-	"python-pillow>=8.3.1-1"
+	python-pillow
 	python-xlib
+	libxkbcommon
 	python-hidapi
 	python-six
 	python-pyrad
+	python-ldap
 	python-zstandard
 	libgpiod
 	freetype2
@@ -72,7 +74,7 @@ depends=(
 	nginx-mainline
 	openssl
 	platformio
-	avrdude-svn
+	avrdude-pikvm
 	make
 	patch
 	sudo

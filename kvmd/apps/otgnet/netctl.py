@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2022  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -43,6 +43,19 @@ class IfaceAddIpCtl(BaseCtl):
 
     def get_command(self, direct: bool) -> list[str]:
         return [*self.__base_cmd, "address", ("add" if direct else "del"), self.__cidr, "dev", self.__iface]
+
+
+class IptablesAllowEstRelCtl(BaseCtl):
+    def __init__(self, base_cmd: list[str], iface: str) -> None:
+        self.__base_cmd = base_cmd
+        self.__iface = iface
+
+    def get_command(self, direct: bool) -> list[str]:
+        return [
+            *self.__base_cmd,
+            ("-A" if direct else "-D"), "INPUT", "-i", self.__iface,
+            "-m", "state", "--state", "ESTABLISHED,RELATED", "-j", "ACCEPT",
+        ]
 
 
 class IptablesDropAllCtl(BaseCtl):

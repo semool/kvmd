@@ -1,8 +1,8 @@
-# ========================================================================== #
+/*****************************************************************************
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2022  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -17,23 +17,24 @@
 #    You should have received a copy of the GNU General Public License       #
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.  #
 #                                                                            #
-# ========================================================================== #
+*****************************************************************************/
 
 
-import os
+#pragma once
 
-import aiofiles
-import aiofiles.base
+#include <Arduino.h>
 
-from . import aiotools
-
-
-# =====
-async def read(path: str) -> str:
-    async with aiofiles.open(path) as afile:  # type: ignore
-        return (await afile.read())
+#include "connection.h"
 
 
-async def afile_sync(afile: aiofiles.base.AiofilesContextManager) -> None:
-    await afile.flush()  # type: ignore
-    await aiotools.run_async(os.fsync, afile.fileno())  # type: ignore
+namespace DRIVERS {
+	struct Spi : public Connection {
+		Spi() : Connection(CONNECTION) {}
+
+		void begin() override;
+
+		void periodic() override;
+
+		void write(const uint8_t *data, size_t size) override;
+	};
+}

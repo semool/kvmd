@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2022  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -64,6 +64,10 @@ export var tools = new function() {
 			id += chars.charAt(Math.floor(Math.random() * chars.length));
 		}
 		return id;
+	};
+
+	self.makeIdByText = function(text) {
+		return btoa(text).replace("=", "_");
 	};
 
 	self.formatSize = function(size) {
@@ -251,11 +255,66 @@ export var tools = new function() {
 		};
 	};
 
+	self.selector = new function() {
+		return {
+			"addOption": function(el, title, value, selected=false) {
+				el.add(new Option(title, value, selected, selected));
+			},
+			"addComment": function(el, title) {
+				let option = new Option(title, ".".repeat(30), false, false); // Kinda magic value
+				option.disabled = true;
+				option.className = "comment";
+				el.add(option);
+			},
+			"addSeparator": function(el) {
+				if (!self.browser.is_mobile) {
+					self.selector.addComment(el, "\u2500".repeat(30));
+				}
+			},
+
+			"setValues": function(el, values, empty_title=null) {
+				if (values.constructor == Object) {
+					values = Object.keys(values).sort();
+				}
+				let values_json = JSON.stringify(values);
+				if (el.__values_json !== values_json) {
+					el.options.length = 0;
+					for (let value of values) {
+						let title = value;
+						if (title.length === 0 && empty_title !== null) {
+							title = empty_title;
+						}
+						self.selector.addOption(el, title, value);
+					}
+					el.__values_json = values_json;
+					el.__values = values;
+				}
+			},
+			"setSelectedValue": function(el, value) {
+				if (el.__values && el.__values.includes(value)) {
+					el.value = value;
+				}
+			},
+		};
+	};
+
 	self.progress = new function() {
 		return {
 			"setValue": function(el, title, percent) {
 				el.setAttribute("data-label", title);
-				$(`${el.id}-value`).style.width = `${percent}%`;
+				el.querySelector(".progress-value").style.width = `${percent}%`;
+			},
+			"setPercentOf": function(el, max, value) {
+				let percent = Math.round(value * 100 / max);
+				self.progress.setValue(el, `${percent}%`, percent);
+			},
+			"setSizeOf": function(el, title, size, free) {
+				let size_str = self.formatSize(size);
+				let used = size - free;
+				let used_str = self.formatSize(used);
+				let percent = used / size * 100;
+				title = title.replace("%s", `${used_str} of ${size_str}`);
+				self.progress.setValue(el, title, percent);
 			},
 		};
 	};

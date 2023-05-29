@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2022  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -39,6 +39,7 @@ from .. import init
 from .netctl import BaseCtl
 from .netctl import IfaceUpCtl
 from .netctl import IfaceAddIpCtl
+from .netctl import IptablesAllowEstRelCtl
 from .netctl import IptablesDropAllCtl
 from .netctl import IptablesAllowIcmpCtl
 from .netctl import IptablesAllowPortCtl
@@ -101,6 +102,7 @@ class _Service:  # pylint: disable=too-many-instance-attributes
         ctls: list[BaseCtl] = [
             CustomCtl(self.__pre_start_cmd, self.__post_stop_cmd, placeholders),
             IfaceUpCtl(self.__ip_cmd, netcfg.iface),
+            IptablesAllowEstRelCtl(self.__iptables_cmd, netcfg.iface),
             *([IptablesAllowIcmpCtl(self.__iptables_cmd, netcfg.iface)] if self.__allow_icmp else []),
             *[
                 IptablesAllowPortCtl(self.__iptables_cmd, netcfg.iface, port, tcp)
@@ -174,8 +176,8 @@ class _Service:  # pylint: disable=too-many-instance-attributes
             real_driver = "rndis"
         path = usb.get_gadget_path(self.__gadget, usb.G_FUNCTIONS, f"{real_driver}.usb0/ifname")
         logger.info("Using OTG gadget %r ...", self.__gadget)
-        with open(path) as iface_file:
-            iface = iface_file.read().strip()
+        with open(path) as file:
+            iface = file.read().strip()
             logger.info("Using OTG Ethernet interface %r ...", iface)
             assert iface
             return iface
