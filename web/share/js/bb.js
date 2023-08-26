@@ -25,6 +25,7 @@
 
 export var browser = new function() {
 	// https://stackoverflow.com/questions/9847580/how-to-detect-safari-chrome-ie-firefox-and-opera-browser/9851769
+	// https://github.com/fingerprintjs/fingerprintjs/discussions/641
 
 	// Opera 8.0+
 	let is_opera = (
@@ -34,7 +35,7 @@ export var browser = new function() {
 	);
 
 	// Firefox 1.0+
-	let is_firefox = (typeof InstallTrigger !== "undefined");
+	let is_firefox = (typeof mozInnerScreenX !== "undefined");
 
 	// Safari 3.0+ "[object HTMLElementConstructor]"
 	let is_safari = (function() {
@@ -129,15 +130,17 @@ export function checkBrowser(desktop_css, mobile_css) {
 		return false;
 
 	} else {
-		if (browser.is_mobile) {
-			__addCssLink("/share/css/x-mobile.css");
-			if (mobile_css) {
-				__addCssLink(mobile_css);
-			}
-		} else {
+		let force_desktop = (new URL(window.location.href)).searchParams.get("force_desktop");
+		let force_mobile = (new URL(window.location.href)).searchParams.get("force_mobile");
+		if ((force_desktop || !browser.is_mobile) && !force_mobile) {
 			__addCssLink("/share/css/x-desktop.css");
 			if (desktop_css) {
 				__addCssLink(desktop_css);
+			}
+		} else {
+			__addCssLink("/share/css/x-mobile.css");
+			if (mobile_css) {
+				__addCssLink(mobile_css);
 			}
 		}
 		return true;

@@ -11,12 +11,19 @@ _variants=(
 	v0-hdmiusb:rpi2
 	v0-hdmiusb:rpi3
 
+	v1-hdmi:zero2w
+	v1-hdmi:rpi2
+	v1-hdmi:rpi3
+
+	v1-hdmiusb:zero2w
+	v1-hdmiusb:rpi2
+	v1-hdmiusb:rpi3
+
 	v2-hdmi:zero2w
 	v2-hdmi:rpi3
 	v2-hdmi:rpi4
 
 	v2-hdmiusb:rpi4
-	v2-hdmiusb:generic
 
 	v3-hdmi:rpi4
 
@@ -32,7 +39,7 @@ for _variant in "${_variants[@]}"; do
 	pkgname+=(kvmd-platform-$_platform-$_board)
 done
 pkgbase=kvmd
-pkgver=3.224
+pkgver=3.252
 pkgrel=1
 pkgdesc="The main PiKVM daemon"
 url="https://github.com/pikvm/kvmd"
@@ -44,6 +51,7 @@ depends=(
 	python-yaml
 	python-aiohttp
 	python-aiofiles
+	python-async-lru
 	python-passlib
 	python-pyotp
 	python-qrcode
@@ -71,7 +79,7 @@ depends=(
 	libgpiod
 	freetype2
 	"v4l-utils>=1.22.1-1"
-	nginx-mainline
+	"nginx-mainline>=1.25.1"
 	openssl
 	platformio
 	avrdude-pikvm
@@ -109,6 +117,9 @@ depends=(
 	wpa_supplicant
 	run-parts
 
+	# fsck for /boot
+	dosfstools
+
 	# Misc
 	hostapd
 )
@@ -119,7 +130,10 @@ conflicts=(
 	python-pikvm
 	python-aiohttp-pikvm
 )
-makedepends=(python-setuptools)
+makedepends=(
+	python-setuptools
+	python-pip
+)
 source=("$url/archive/v$pkgver.tar.gz")
 md5sums=(SKIP)
 backup=(
@@ -135,20 +149,11 @@ backup=(
 )
 
 
-build() {
-	cd "$srcdir"
-	rm -rf $pkgname-build
-	cp -r kvmd-$pkgver $pkgname-build
-	cd $pkgname-build
-	python setup.py build
-}
-
-
 package_kvmd() {
 	install=$pkgname.install
 
-	cd "$srcdir/$pkgname-build"
-	python setup.py install --root="$pkgdir"
+	cd "$srcdir/kvmd-$pkgver"
+	pip install --root="$pkgdir" --no-deps .
 
 	install -Dm755 -t "$pkgdir/usr/bin" scripts/kvmd-{bootconfig,gencert,certbot}
 
@@ -200,10 +205,7 @@ for _variant in "${_variants[@]}"; do
 		cd \"kvmd-\$pkgver\"
 
 		pkgdesc=\"PiKVM platform configs - $_platform for $_board\"
-		depends=(kvmd=$pkgver-$pkgrel)
-		if [ $_board != generic ]; then
-			depends=(\"\${depends[@]}\" \"linux-rpi-pikvm>=5.15.25-16\")
-		fi
+		depends=(kvmd=$pkgver-$pkgrel \"linux-rpi-pikvm>=5.15.68-3\")
 
 		backup=(
 			etc/sysctl.d/99-kvmd.conf

@@ -220,10 +220,30 @@ export function JanusStreamer(__setActive, __setInactive, __setInfo, __allow_aud
 			},
 
 			"onremotestream": function(stream) {
-				__logInfo("Got a remote stream:", stream);
+				let tracks = stream.getTracks();
+				__logInfo("Got a remote stream changes:", stream, tracks);
+
+				let has_video = false;
+				for (let track of tracks) {
+					if (track.kind == "video") {
+						has_video = true;
+						break;
+					}
+				}
+
+				if (!has_video && __isOnline()) {
+					// Найдено в Windows 11 и Chrome/Edge.
+					// При перезагрузке целевого хоста браузер мьютит трек,
+					// приходит стрим без видеотрека и всё умирает.
+					// Связь должна как-то сама восстанавливаться,
+					// но этого почему-то не происходит. Костыль решает проблему.
+					__destroyJanus();
+				}
+
 				_Janus.attachMediaStream($("stream-video"), stream);
 				__sendKeyRequired();
 				__startInfoInterval();
+
 				// FIXME: Задержка уменьшается, но начинаются заикания на кейфреймах.
 				//   - https://github.com/Glimesh/janus-ftl-plugin/issues/101
 				/*if (__handle && __handle.webrtcStuff && __handle.webrtcStuff.pc) {
@@ -265,7 +285,6 @@ export function JanusStreamer(__setActive, __setInactive, __setInfo, __allow_aud
 
 	var __updateInfo = function() {
 		if (__handle !== null) {
-			let online = !!(__state && __state.source && __state.source.online);
 			let info = "";
 			if (__handle !== null) {
 				// https://wiki.whatwg.org/wiki/Video_Metrics
@@ -276,15 +295,18 @@ export function JanusStreamer(__setActive, __setInactive, __setInfo, __allow_aud
 				} else if (el.mozPaintedFrames !== undefined) {
 					frames = el.mozPaintedFrames;
 				}
+				info = `${__handle.getBitrate()}`.replace("kbits/sec", "kbps");
 				if (frames !== null) {
-					info = `${Math.max(0, frames - __frames)} fps dynamic`;
+					info += ` / ${Math.max(0, frames - __frames)} fps dynamic`;
 					__frames = frames;
-				} else {
-					info = `${__handle.getBitrate()}`.replace("kbits/sec", "kbps");
 				}
 			}
-			__setInfo(true, online, info);
+			__setInfo(true, __isOnline(), info);
 		}
+	};
+
+	var __isOnline = function() {
+		return !!(__state && __state.source && __state.source.online);
 	};
 
 	var __sendWatch = function() {

@@ -53,6 +53,7 @@ from ..yamlconf import Option
 from ..yamlconf import build_raw_from_options
 from ..yamlconf.dumper import make_config_dump
 from ..yamlconf.loader import load_yaml_file
+from ..yamlconf.merger import yaml_merge
 
 from ..validators.basic import valid_stripped_string
 from ..validators.basic import valid_stripped_string_not_empty
@@ -82,6 +83,7 @@ from ..validators.net import valid_mac
 from ..validators.net import valid_ssl_ciphers
 
 from ..validators.hid import valid_hid_key
+from ..validators.hid import valid_hid_mouse_output
 from ..validators.hid import valid_hid_mouse_move
 
 from ..validators.kvm import valid_stream_quality
@@ -176,8 +178,8 @@ def _init_config(config_path: str, override_options: list[str], **load_flags: bo
 
     scheme = _get_config_scheme()
     try:
-        tools.merge(raw_config, (raw_config.pop("override", {}) or {}))
-        tools.merge(raw_config, build_raw_from_options(override_options))
+        yaml_merge(raw_config, (raw_config.pop("override", {}) or {}))
+        yaml_merge(raw_config, build_raw_from_options(override_options), "raw CLI options")
         _patch_raw(raw_config)
         config = make_config(raw_config, scheme)
 
@@ -395,6 +397,12 @@ def _get_config_scheme() -> dict:
                 "enabled": Option(True, type=valid_bool),
             },
 
+            "prometheus": {
+                "auth": {
+                    "enabled": Option(True, type=valid_bool),
+                },
+            },
+
             "hid": {
                 "type": Option("", type=valid_stripped_string_not_empty),
 
@@ -588,7 +596,7 @@ def _get_config_scheme() -> dict:
 
         "otgnet": {
             "iface": {
-                "net":    Option("169.254.0.0/28", type=functools.partial(valid_net, v6=False)),
+                "net":    Option("172.30.30.0/24", type=functools.partial(valid_net, v6=False)),
                 "ip_cmd": Option(["/usr/bin/ip"],  type=valid_command),
             },
 
@@ -662,8 +670,9 @@ def _get_config_scheme() -> dict:
         },
 
         "vnc": {
-            "desired_fps": Option(30, type=valid_stream_fps),
-            "keymap":      Option("/usr/share/kvmd/keymaps/en-us", type=valid_abs_file),
+            "desired_fps":  Option(30, type=valid_stream_fps),
+            "mouse_output": Option("usb", type=valid_hid_mouse_output),
+            "keymap":       Option("/usr/share/kvmd/keymaps/en-us", type=valid_abs_file),
 
             "server": {
                 "host":        Option("::", type=valid_ip_or_host),

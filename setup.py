@@ -28,45 +28,35 @@ from setuptools import setup
 
 
 # =====
+class _Template(str):
+    def __init__(self, text: str) -> None:
+        self.__text = textwrap.dedent(text).strip()
+
+    def __mod__(self, kv: dict) -> str:
+        kv = {"module_name": kv["ep"].module_name, **kv}
+        return (self.__text % (kv))
+
+
 class _ScriptWriter(setuptools.command.easy_install.ScriptWriter):
-    template = textwrap.dedent("""
-        # EASY-INSTALL-ENTRY-SCRIPT: {spec},{group},{name}
+    template = _Template("""
+        # EASY-INSTALL-ENTRY-SCRIPT: %(spec)r,%(group)r,%(name)r
 
-        __requires__ = "{spec}"
+        __requires__ = %(spec)r
 
-        from {module} import main
+        from %(module_name)s import main
 
-        if __name__ == "__main__":
+        if __name__ == '__main__':
             main()
-    """).strip()
-
-    @classmethod
-    def get_args(cls, dist, header=None):  # type: ignore
-        if header is None:
-            header = cls.get_header()
-        spec = str(dist.as_requirement())
-        for group_type in ["console", "gui"]:
-            group = group_type + "_scripts"
-            for (name, ep) in dist.get_entry_map(group).items():
-                cls._ensure_safe_name(name)
-                script_text = cls.template.format(
-                    spec=spec,
-                    group=group,
-                    name=name,
-                    module=ep.module_name,
-                )
-                yield from cls._get_script_args(group_type, name, header, script_text)
+    """)
 
 
 # =====
 def main() -> None:
     setuptools.command.easy_install.ScriptWriter = _ScriptWriter
-    setuptools.command.easy_install.get_script_args = _ScriptWriter.get_script_args
-    setuptools.command.easy_install.get_script_header = _ScriptWriter.get_script_header
 
     setup(
         name="kvmd",
-        version="3.224",
+        version="3.252",
         url="https://github.com/pikvm/kvmd",
         license="GPLv3",
         author="Maxim Devaev",
@@ -85,6 +75,7 @@ def main() -> None:
             "kvmd.plugins.hid._mcu",
             "kvmd.plugins.hid.otg",
             "kvmd.plugins.hid.bt",
+            "kvmd.plugins.hid.ch9329",
             "kvmd.plugins.atx",
             "kvmd.plugins.msd",
             "kvmd.plugins.msd.otg",

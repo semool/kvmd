@@ -1,0 +1,4 @@
+/.pico-sdk*
+/.tinyusb*
+/.build/
+/*.uf2
