@@ -15,7 +15,7 @@ install: all
 clean:
 	rm -rf .build hid.uf2
 clean-all: clean
-	rm -rf .pico-sdk* .tinyusb*
+	rm -rf .pico-sdk* .tinyusb* .ps2x2pico
 
 
 define libdep
@@ -30,8 +30,9 @@ endef
 	$(call libdep,pico-sdk,raspberrypi/pico-sdk,6a7db34ff63345a7badec79ebea3aaef1712f374)
 .tinyusb:
 	$(call libdep,tinyusb,hathach/tinyusb,d713571cd44f05d2fc72efc09c670787b74106e0)
-# TODO: PS2: Add your library here and add it to "all" and "clean-all" targets
-deps: .pico-sdk .tinyusb
+.ps2x2pico:
+	$(call libdep,ps2x2pico,No0ne/ps2x2pico,d95332b4ea11cad4a11da070857e613c80f9b935)
+deps: .pico-sdk .tinyusb .ps2x2pico
 
 
 .PHONY: deps
