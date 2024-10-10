@@ -47,12 +47,11 @@ export function Gpio(__recorder) {
 			/* Disable Status LED in Webif for all ezcoo2/3 Ports when a Port on ezcoo1 is selected */
 			for (let channel of ["ch1_led", "ch2_led", "ch3_led"]) {
 				if (state.inputs[channel].state) {
-					/*alert("Active Channel: " + channel);*/
+					/* alert("Active Channel: " + channel); */
 					for (let channel of ["ch5_led", "ch6_led", "ch7_led", "ch8_led", "ch9_led", "ch10_led", "ch11_led", "ch12_led"]) {
 						if (state.inputs[channel].state) {
-							let el = $(`gpio-led-${channel}`);
-							if (el) {
-								/*alert("Disabled Channel: " + channel);*/
+							for (let el of $$(`gpio-led-${channel}`)) {
+								/* alert("Disabled Channel: " + channel); */
 								__setLedState(el, false);
 							}
 						}
@@ -62,12 +61,11 @@ export function Gpio(__recorder) {
 			/* Disable Status LED in Webif for all ezcoo3 Ports when a Port on ezcoo2 is selected */
 			for (let channel of ["ch5_led", "ch6_led", "ch7_led"]) {
 				if (state.inputs[channel].state) {
-					/*alert("Active Channel: " + channel);*/
+					/* alert("Active Channel: " + channel); */
 					for (let channel of ["ch9_led", "ch10_led", "ch11_led", "ch12_led"]) {
 						if (state.inputs[channel].state) {
-							let el = $(`gpio-led-${channel}`);
-							if (el) {
-								/*alert("Disabled Channel: " + channel);*/
+							for (let el of $$(`gpio-led-${channel}`)) {
+								/* alert("Disabled Channel: " + channel); */
 								__setLedState(el, false);
 							}
 						}
@@ -107,6 +105,7 @@ export function Gpio(__recorder) {
 					title.push("<span></span>");
 				}
 				last_is_label = (item.type === "label");
+				title.push('<img class="led-gray" src="/share/svg/kvm.svg">')
 				title.push(__createItem(item));
 			}
 			$("gpio-menu-button").innerHTML = title.join(" ");
@@ -150,6 +149,28 @@ export function Gpio(__recorder) {
 		if (item.type === "label") {
 			return item.text;
 		} else if (item.type === "input") {
+			for (let channel of ["ch1_plug_led", "ch2_plug_led", "ch3_plug_led", "ch5_plug_led", "ch6_plug_led", "ch7_plug_led", "ch9_plug_led", "ch10_plug_led", "ch11_plug_led", "ch12_plug_led"]) {
+				if (item.channel === channel) {
+					return `
+						<img
+							class="gpio-led gpio-led-${item.channel} inline-lamp-big led-gray"
+							src="/share/svg/led-atx-power.svg"
+							data-color="${item.color}"
+						/>
+					`;
+				}
+			}
+			for (let channel of ["ch1_led", "ch2_led", "ch3_led", "ch4_led", "ch5_led", "ch6_led", "ch7_led", "ch8_led", "ch9_led", "ch10_led", "ch11_led", "ch12_led"]) {
+				if (item.channel === channel) {
+					return `
+						<img
+							class="gpio-led gpio-led-${item.channel} inline-lamp-big led-gray"
+							src="/share/svg/hdmi.svg"
+							data-color="${item.color}"
+						/>
+					`;
+				}
+			}
 			return `
 				<img
 					class="gpio-led gpio-led-${item.channel} inline-lamp-big led-gray"
