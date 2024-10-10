@@ -22,6 +22,7 @@
 
 import pkgutil
 import functools
+import importlib.util
 import importlib.machinery
 
 import Xlib.keysymdef
@@ -87,10 +88,11 @@ def _get_keysyms() -> dict[str, int]:
     for (finder, module_name, _) in pkgutil.walk_packages(Xlib.keysymdef.__path__):
         if not isinstance(finder, importlib.machinery.FileFinder):
             continue
-        loader = finder.find_module(module_name)
-        if loader is None:
+        spec = finder.find_spec(module_name)
+        if spec is None or spec.loader is None:
             continue
-        module = loader.load_module(module_name)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
         for keysym_name in dir(module):
             if keysym_name.startswith("XK_"):
                 short_name = keysym_name[3:]
@@ -133,8 +135,8 @@ def _read_keyboard_layout(path: str) -> dict[int, list[At1Key]]:  # Keysym to ev
 
             try:
                 at1_code = int(parts[1], 16)
-            except ValueError as err:
-                logger.error("Syntax error at %s:%d: %s", path, lineno, err)
+            except ValueError as ex:
+                logger.error("Syntax error at %s:%d: %s", path, lineno, ex)
                 continue
             rest = parts[2:]
 

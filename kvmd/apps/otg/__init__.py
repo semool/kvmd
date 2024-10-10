@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2024  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -346,5 +346,5 @@ def main(argv: (list[str] | None)=None) -> None:
     options = parser.parse_args(argv[1:])
     try:
         options.cmd(config)
-    except ValidatorError as err:
-        raise SystemExit(str(err))
+    except ValidatorError as ex:
+        raise SystemExit(str(ex))

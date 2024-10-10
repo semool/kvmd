@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2024  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -41,6 +41,7 @@ from ...logging import get_logger
 from ...clients.kvmd import KvmdClient
 
 from ... import aiotools
+from ... import network
 
 from .auth import IpmiAuthManager
 
@@ -64,6 +65,8 @@ class IpmiServer(BaseIpmiServer):  # pylint: disable=too-many-instance-attribute
         sol_select_timeout: float,
         sol_proxy_port: int,
     ) -> None:
+
+        host = network.get_listen_host(host)
 
         super().__init__(authdata=auth_manager, address=host, port=port)
 
@@ -98,6 +101,7 @@ class IpmiServer(BaseIpmiServer):  # pylint: disable=too-many-instance-attribute
     # =====
 
     def handle_raw_request(self, request: dict, session: IpmiServerSession) -> None:
+        # Parameter 'request' has been renamed to 'req' in overriding method
         handler = {
             (6, 1): (lambda _, session: self.send_device_id(session)),  # Get device ID
             (6, 7): self.__get_power_state_handler,  # Power state
@@ -142,13 +146,13 @@ class IpmiServer(BaseIpmiServer):  # pylint: disable=too-many-instance-attribute
         data = [int(result["leds"]["power"]), 0, 0]
         session.send_ipmi_response(data=data)
 
-    def __chassis_control_handler(self, request: dict, session: IpmiServerSession) -> None:
+    def __chassis_control_handler(self, req: dict, session: IpmiServerSession) -> None:
         action = {
             0: "off_hard",
             1: "on",
             3: "reset_hard",
             5: "off",
-        }.get(request["data"][0], "")
+        }.get(req["data"][0], "")
         if action:
             if not self.__make_request(session, f"atx.switch_power({action})", "atx.switch_power", action=action):
                 code = 0xC0  # Try again later
@@ -168,8 +172,8 @@ class IpmiServer(BaseIpmiServer):  # pylint: disable=too-many-instance-attribute
                 async with self.__kvmd.make_session(credentials.kvmd_user, credentials.kvmd_passwd) as kvmd_session:
                     func = functools.reduce(getattr, func_path.split("."), kvmd_session)
                     return (await func(**kwargs))
-            except (aiohttp.ClientError, asyncio.TimeoutError) as err:
-                logger.error("[%s]: Can't perform request %s: %s", session.sockaddr[0], name, err)
+            except (aiohttp.ClientError, asyncio.TimeoutError) as ex:
+                logger.error("[%s]: Can't perform request %s: %s", session.sockaddr[0], name, ex)
                 raise
 
         return aiotools.run_sync(runner())

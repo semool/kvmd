@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2024  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -86,13 +86,11 @@ export function Msd() {
 
 	var __clickRemoveButton = function() {
 		let name = $("msd-image-selector").value;
-		wm.confirm(`Are you sure you want to remove the image<br><b>${name}</b> from PiKVM?`).then(function(ok) {
+		wm.confirm("Are you sure you want to remove this image?", name).then(function(ok) {
 			if (ok) {
-				let http = tools.makeRequest("POST", `/api/msd/remove?image=${name}`, function() {
-					if (http.readyState === 4) {
-						if (http.status !== 200) {
-							wm.error("Can't remove image:<br>", http.responseText);
-						}
+				tools.httpPost("/api/msd/remove", {"image": name}, function(http) {
+					if (http.status !== 200) {
+						wm.error("Can't remove image", http.responseText);
 					}
 				});
 			}
@@ -100,11 +98,9 @@ export function Msd() {
 	};
 
 	var __sendParam = function(name, value) {
-		let http = tools.makeRequest("POST", `/api/msd/set_params?${name}=${encodeURIComponent(value)}`, function() {
-			if (http.readyState === 4) {
-				if (http.status !== 200) {
-					wm.error("Can't configure MSD:<br>", http.responseText);
-				}
+		tools.httpPost("/api/msd/set_params", {[name]: value}, function(http) {
+			if (http.status !== 200) {
+				wm.error("Can't configure Mass Storage", http.responseText);
 			}
 		});
 	};
@@ -128,8 +124,9 @@ export function Msd() {
 	var __httpStateChange = function() {
 		if (__http.readyState === 4) {
 			if (__http.status !== 200) {
-				wm.error("Can't upload image to the Mass Storage Drive:<br>", __http.responseText);
+				wm.error("Can't upload image", __http.responseText);
 			} else if ($("msd-new-url").value.length > 0) {
+				let html = "";
 				let msg = "";
 				try {
 					let end = __http.responseText.lastIndexOf("\r\n");
@@ -143,13 +140,15 @@ export function Msd() {
 					let result_str = __http.responseText.slice(begin, end);
 					let result = JSON.parse(result_str);
 					if (!result.ok) {
-						msg = `Can't upload image to the Mass Storage Drive:<br>${result_str}`;
+						html = "Can't upload image";
+						msg = result_str;
 					}
-				} catch (err) {
-					msg = `Can't parse upload result:<br>${err}`;
+				} catch (ex) {
+					html = "Can't parse upload result";
+					msg = `${ex}`;
 				}
-				if (msg.length > 0) {
-					wm.error(msg);
+				if (html.length > 0) {
+					wm.error(html, msg);
 				}
 			}
 			tools.hidden.setVisible($("msd-new-sub"), false);
@@ -168,11 +167,9 @@ export function Msd() {
 	};
 
 	var __clickConnectButton = function(connected) {
-		let http = tools.makeRequest("POST", `/api/msd/set_connected?connected=${connected}`, function() {
-			if (http.readyState === 4) {
-				if (http.status !== 200) {
-					wm.error("Switch error:<br>", http.responseText);
-				}
+		tools.httpPost("/api/msd/set_connected", {"connected": connected}, function(http) {
+			if (http.status !== 200) {
+				wm.error("Can't switch Mass Storage", http.responseText);
 			}
 			__applyState();
 		});
@@ -181,13 +178,11 @@ export function Msd() {
 	};
 
 	var __clickResetButton = function() {
-		wm.confirm("Are you sure you want to reset Mass Storage Drive?").then(function(ok) {
+		wm.confirm("Are you sure you want to reset Mass Storage?").then(function(ok) {
 			if (ok) {
-				let http = tools.makeRequest("POST", "/api/msd/reset", function() {
-					if (http.readyState === 4) {
-						if (http.status !== 200) {
-							wm.error("MSD reset error:<br>", http.responseText);
-						}
+				tools.httpPost("/api/msd/reset", null, function(http) {
+					if (http.status !== 200) {
+						wm.error("Mass Storage reset error", http.responseText);
 					}
 					__applyState();
 				});
@@ -214,7 +209,7 @@ export function Msd() {
 			$("msd-new-url").value = "";
 			let part = __state.storage.parts[$("msd-new-part-selector").value];
 			if (file.size > part.size) {
-				wm.error("New image is too big for the MSD partition.<br>Maximum:", tools.formatSize(part.size));
+				wm.error(`New image is too big for the Mass Storage partition.<br>Maximum: ${tools.formatSize(part.size)}`);
 				el_input.value = "";
 			}
 		}

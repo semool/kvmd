@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2024  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -165,30 +165,6 @@ ul#navbar li div.menu div.buttons {
 ul#navbar li div.menu div.text {
 	margin: 10px 15px 10px 15px;
 	font-size: 14px;
-}
-
-ul#navbar li div.menu table.kv {
-	border-spacing: 5px;
-	margin: 0 10px 0 10px;
-	font-size: 12px;
-}
-ul#navbar li div.menu table.kv td {
-	text-align: left;
-}
-ul#navbar li div.menu table.kv td.value {
-	font-weight: bold;
-	max-width: 310px;
-	overflow: hidden;
-}
-ul#navbar li div.menu table.kv td.value-slider {
-	width: 100%;
-}
-ul#navbar li div.menu table.kv td.value-number {
-	font-weight: bold;
-	max-width: 310px;
-	overflow: hidden;
-	min-width: 40px;
-	max-width: 40px;
 }
 
 ul#navbar li div.menu div.buttons button,

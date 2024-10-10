@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2024  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -47,9 +47,9 @@ def _set_param(gadget: str, instance: int, param: str, value: str) -> None:
     try:
         with open(_get_param_path(gadget, instance, param), "w") as file:
             file.write(value + "\n")
-    except OSError as err:
-        if err.errno == errno.EBUSY:
-            raise SystemExit(f"Can't change {param!r} value because device is locked: {err}")
+    except OSError as ex:
+        if ex.errno == errno.EBUSY:
+            raise SystemExit(f"Can't change {param!r} value because device is locked: {ex}")
         raise
 
 

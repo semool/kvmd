@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2024  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -171,8 +171,8 @@ def _init_config(config_path: str, override_options: list[str], **load_flags: bo
     config_path = os.path.expanduser(config_path)
     try:
         raw_config: dict = load_yaml_file(config_path)
-    except Exception as err:
-        raise SystemExit(f"ConfigError: Can't read config file {config_path!r}:\n{tools.efmt(err)}")
+    except Exception as ex:
+        raise SystemExit(f"ConfigError: Can't read config file {config_path!r}:\n{tools.efmt(ex)}")
     if not isinstance(raw_config, dict):
         raise SystemExit(f"ConfigError: Top-level of the file {config_path!r} must be a dictionary")
 
@@ -187,8 +187,8 @@ def _init_config(config_path: str, override_options: list[str], **load_flags: bo
             config = make_config(raw_config, scheme)
 
         return config
-    except (ConfigError, UnknownPluginError) as err:
-        raise SystemExit(f"ConfigError: {err}")
+    except (ConfigError, UnknownPluginError) as ex:
+        raise SystemExit(f"ConfigError: {ex}")
 
 
 def _patch_raw(raw_config: dict) -> None:  # pylint: disable=too-many-branches
@@ -382,9 +382,10 @@ def _get_config_scheme() -> dict:
                 "meta":   Option("/etc/kvmd/meta.yaml",    type=valid_abs_file),
                 "extras": Option("/usr/share/kvmd/extras", type=valid_abs_dir),
                 "hw": {
+                    "platform":      Option("/usr/share/kvmd/platform", type=valid_abs_file, unpack_as="platform_path"),
                     "vcgencmd_cmd":  Option(["/usr/bin/vcgencmd"], type=valid_command),
                     "ignore_past":   Option(False, type=valid_bool),
-                    "state_poll":    Option(10.0,  type=valid_float_f01),
+                    "state_poll":    Option(5.0,   type=valid_float_f01),
                 },
                 "fan": {
                     "daemon":     Option("kvmd-fan", type=valid_stripped_string),
@@ -470,12 +471,21 @@ def _get_config_scheme() -> dict:
 
                 "unix":    Option("/run/kvmd/ustreamer.sock", type=valid_abs_path, unpack_as="unix_path"),
                 "timeout": Option(2.0, type=valid_float_f01),
+                "snapshot_timeout": Option(1.0, type=valid_float_f01),  # error_delay * 3 + 1
 
                 "process_name_prefix": Option("kvmd/streamer"),
+
+                "pre_start_cmd":        Option(["/bin/true", "pre-start"], type=valid_command),
+                "pre_start_cmd_remove": Option([], type=valid_options),
+                "pre_start_cmd_append": Option([], type=valid_options),
 
                 "cmd":        Option(["/bin/true"], type=valid_command),
                 "cmd_remove": Option([], type=valid_options),
                 "cmd_append": Option([], type=valid_options),
+
+                "post_stop_cmd":        Option(["/bin/true", "post-stop"], type=valid_command),
+                "post_stop_cmd_remove": Option([], type=valid_options),
+                "post_stop_cmd_append": Option([], type=valid_options),
             },
 
             "ocr": {
@@ -648,7 +658,7 @@ def _get_config_scheme() -> dict:
 
         "ipmi": {
             "server": {
-                "host":    Option("::", type=valid_ip_or_host),
+                "host":    Option("",   type=valid_ip_or_host, if_empty=""),
                 "port":    Option(623,  type=valid_port),
                 "timeout": Option(10.0, type=valid_float_f01),
             },
@@ -676,7 +686,7 @@ def _get_config_scheme() -> dict:
             "keymap":       Option("/usr/share/kvmd/keymaps/en-us", type=valid_abs_file),
 
             "server": {
-                "host":        Option("::", type=valid_ip_or_host),
+                "host":        Option("",   type=valid_ip_or_host, if_empty=""),
                 "port":        Option(5900, type=valid_port),
                 "max_clients": Option(10,   type=valid_int_f1),
 
@@ -731,6 +741,16 @@ def _get_config_scheme() -> dict:
                 "vencrypt": {
                     "enabled": Option(True, type=valid_bool, unpack_as="vencrypt_enabled"),
                 },
+            },
+        },
+
+        "nginx": {
+            "http": {
+                "port": Option(80, type=valid_port),
+            },
+            "https": {
+                "enabled": Option(True, type=valid_bool),
+                "port":    Option(443,  type=valid_port),
             },
         },
 

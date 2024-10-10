@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2024  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -34,7 +34,8 @@ class LogReader:
     async def poll_log(self, seek: int, follow: bool) -> AsyncGenerator[dict, None]:
         reader = systemd.journal.Reader()
         reader.this_boot()
-        reader.this_machine()
+        # XXX: Из-за смены ID машины в bootconfig это не работает при первой загрузке.
+        # reader.this_machine()
         reader.log_level(systemd.journal.LOG_DEBUG)
 
         services = set(

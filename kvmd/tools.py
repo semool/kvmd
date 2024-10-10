@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2024  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -26,7 +26,6 @@ import multiprocessing.queues
 import queue
 import shlex
 
-from typing import Hashable
 from typing import TypeVar
 
 
@@ -40,12 +39,12 @@ def cmdfmt(cmd: list[str]) -> str:
     return " ".join(map(shlex.quote, cmd))
 
 
-def efmt(err: Exception) -> str:
-    return f"{type(err).__name__}: {err}"
+def efmt(ex: Exception) -> str:
+    return f"{type(ex).__name__}: {ex}"
 
 
 # =====
-def rget(dct: dict, *keys: Hashable) -> dict:
+def rget(dct: dict, *keys: str) -> dict:
     result = functools.reduce((lambda nxt, key: nxt.get(key, {})), keys, dct)
     if not isinstance(result, dict):
         raise TypeError(f"Not a dict as result: {result!r} from {dct!r} at {list(keys)}")

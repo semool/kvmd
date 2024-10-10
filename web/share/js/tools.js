@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2024  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -39,19 +39,47 @@ export var tools = new function() {
 
 	/************************************************************************/
 
-	self.makeRequest = function(method, url, callback, body=null, content_type=null, timeout=15000) {
+	self.httpRequest = function(method, url, params, callback, body=null, content_type=null, timeout=15000) {
+		if (params) {
+			params = new URLSearchParams(params);
+			if (params) {
+				url += "?" + params;
+			}
+		}
 		let http = new XMLHttpRequest();
 		http.open(method, url, true);
 		if (content_type) {
 			http.setRequestHeader("Content-Type", content_type);
 		}
-		http.onreadystatechange = callback;
+		http.onreadystatechange = function() {
+			if (http.readyState === 4) {
+				callback(http);
+			}
+		};
 		http.timeout = timeout;
 		http.send(body);
-		return http;
+	};
+
+	self.httpGet = function(url, params, callback, body=null, content_type=null, timeout=15000) {
+		self.httpRequest("GET", url, params, callback, body, content_type, timeout);
+	};
+
+	self.httpPost = function(url, params, callback, body=null, content_type=null, timeout=15000) {
+		self.httpRequest("POST", url, params, callback, body, content_type, timeout);
 	};
 
 	/************************************************************************/
+
+	self.escape = function(text) {
+		return text.replace(
+			/[^0-9A-Za-z ]/g,
+			ch => "&#" + ch.charCodeAt(0) + ";"
+		);
+	};
+
+	self.makeClosure = function(func, ...args) {
+		return () => func(...args);
+	};
 
 	self.upperFirst = function(text) {
 		return text[0].toUpperCase() + text.slice(1);
@@ -74,6 +102,10 @@ export var tools = new function() {
 		min = Math.ceil(min);
 		max = Math.floor(max);
 		return Math.floor(Math.random() * (max - min + 1)) + min;
+	};
+
+	self.formatHex = function(value) {
+		return `0x${value.toString(16).toUpperCase()}`;
 	};
 
 	self.formatSize = function(size) {
@@ -272,9 +304,9 @@ export var tools = new function() {
 				option.className = "comment";
 				el.add(option);
 			},
-			"addSeparator": function(el) {
+			"addSeparator": function(el, repeat=30) {
 				if (!self.browser.is_mobile) {
-					self.selector.addComment(el, "\u2500".repeat(30));
+					self.selector.addComment(el, "\u2500".repeat(repeat));
 				}
 			},
 
@@ -391,6 +423,9 @@ export var tools = new function() {
 				return (value !== null ? value : `${default_value}`);
 			},
 			"set": (key, value) => window.localStorage.setItem(key, value),
+
+			"getInt": (key, default_value) => parseInt(self.storage.get(key, default_value)),
+			"setInt": (key, value) => self.storage.set(key, value),
 
 			"getBool": (key, default_value) => !!parseInt(self.storage.get(key, (default_value ? "1" : "0"))),
 			"setBool": (key, value) => self.storage.set(key, (value ? "1" : "0")),

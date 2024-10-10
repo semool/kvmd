@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2024  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -71,7 +71,7 @@ export function Ocr(__getGeometry) {
 	/************************************************************************/
 
 	self.setState = function(state) {
-		let enabled = (state && state.ocr.enabled && navigator.clipboard && !tools.browser.is_mobile);
+		let enabled = (state && state.ocr.enabled && !tools.browser.is_mobile);
 		if (enabled) {
 			let el = $("stream-ocr-lang-selector");
 			tools.selector.setValues(el, state.ocr.langs.available);
@@ -161,28 +161,23 @@ export function Ocr(__getGeometry) {
 		tools.el.setEnabled($("stream-ocr-button"), false);
 		tools.el.setEnabled($("stream-ocr-lang-selector"), false);
 		$("stream-ocr-led").className = "led-yellow-rotating-fast";
-
-		let lang = $("stream-ocr-lang-selector").value;
-		let url = `/api/streamer/snapshot?ocr=1&ocr_langs=${lang}`;
-		url += `&ocr_left=${__selection.left}&ocr_top=${__selection.top}`;
-		url += `&ocr_right=${__selection.right}&ocr_bottom=${__selection.bottom}`;
-
-		let http = tools.makeRequest("GET", url, function() {
-			if (http.readyState === 4) {
-				if (http.status === 200) {
-					navigator.clipboard.writeText(http.responseText).then(function() {
-						wm.info("The text is copied to the clipboard");
-					}, function(err) {
-						wm.error("Can't copy text to the clipboard:<br>", err);
-					});
-				} else {
-					wm.error("OCR error:<br>", http.responseText);
-				}
-
-				tools.el.setEnabled($("stream-ocr-button"), true);
-				tools.el.setEnabled($("stream-ocr-lang-selector"), true);
-				$("stream-ocr-led").className = "led-gray";
+		let params = {
+			"ocr": 1,
+			"ocr_langs": $("stream-ocr-lang-selector").value,
+			"ocr_left": __selection.left,
+			"ocr_top": __selection.top,
+			"ocr_right": __selection.right,
+			"orc_bottom": __selection.bottom,
+		};
+		tools.httpGet("/api/streamer/snapshot", params, function(http) {
+			if (http.status === 200) {
+				wm.copyTextToClipboard(http.responseText);
+			} else {
+				wm.error("OCR error:<br>", http.responseText);
 			}
+			tools.el.setEnabled($("stream-ocr-button"), true);
+			tools.el.setEnabled($("stream-ocr-lang-selector"), true);
+			$("stream-ocr-led").className = "led-gray";
 		}, null, null, 30000);
 	};
 

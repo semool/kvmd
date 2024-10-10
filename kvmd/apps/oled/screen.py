@@ -1,8 +1,9 @@
+#!/usr/bin/env python3
 # ========================================================================== #
 #                                                                            #
-#    KVMD - The main PiKVM daemon.                                           #
+#    KVMD-OLED - A small OLED daemon for PiKVM.                              #
 #                                                                            #
-#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2024  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -20,33 +21,34 @@
 # ========================================================================== #
 
 
-import multiprocessing
-import time
+from luma.core.device import device as luma_device
+from luma.core.render import canvas as luma_canvas
 
-from typing import Literal
-
-import setproctitle
-
-from kvmd.apps.cleanup import main
+from PIL import Image
+from PIL import ImageFont
 
 
 # =====
-def test_ok() -> None:
-    _ = Literal  # Makes liters happy
-    queue: "multiprocessing.Queue[Literal[True]]" = multiprocessing.Queue()
+class Screen:
+    def __init__(
+        self,
+        device: luma_device,
+        font: ImageFont.FreeTypeFont,
+        font_spacing: int,
+        offset: tuple[int, int],
+    ) -> None:
 
-    def ustreamer_fake() -> None:
-        setproctitle.setproctitle("kvmd/streamer: /usr/bin/ustreamer")
-        queue.put(True)
-        while True:
-            time.sleep(1)
+        self.__device = device
+        self.__font = font
+        self.__font_spacing = font_spacing
+        self.__offset = offset
 
-    proc = multiprocessing.Process(target=ustreamer_fake, daemon=True)
-    proc.start()
-    assert queue.get(timeout=5)
+    def draw_text(self, text: str, offset_x: int=0) -> None:
+        with luma_canvas(self.__device) as draw:
+            offset = list(self.__offset)
+            offset[0] += offset_x
+            draw.multiline_text(offset, text, font=self.__font, spacing=self.__font_spacing, fill="white")
 
-    assert proc.is_alive()
-    main(["kvmd-cleanup", "--run"])
-
-    assert not proc.is_alive()
-    proc.join()
+    def draw_image(self, image_path: str) -> None:
+        with luma_canvas(self.__device) as draw:
+            draw.bitmap(self.__offset, Image.open(image_path).convert("1"), fill="white")

@@ -4,7 +4,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2024  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -154,7 +154,7 @@
                 <button class="small" data-force-hide-menu id="open-log-button">&bull; Log</button>
               </td>
               <td class="feature-disabled" id="system-tool-wol">
-                <button class="gpio-button small" data-force-hide-menu id="gpio-button-__wol__" data-channel="__wol__" data-confirm="Are you sure to send Wake-on-LAN packet to the server?">&bull; WoL</button>
+                <button class="gpio-button-__wol__ gpio-button small" data-force-hide-menu data-channel="__wol__" data-confirm="Are you sure to send Wake-on-LAN packet to the server?">&bull; WoL</button>
               </td>
             </tr>
           </table>
@@ -195,6 +195,13 @@
               </td>
               <td class="value-number" id="stream-quality-value"></td>
             </tr>
+            <tr>
+              <td>JPEG max fps:</td>
+              <td class="value-slider">
+                <input class="slider" disabled type="range" id="stream-desired-fps-slider">
+              </td>
+              <td class="value-number" id="stream-desired-fps-value"></td>
+            </tr>
             <tr class="feature-disabled" id="stream-h264-bitrate">
               <td>H.264 kbps:</td>
               <td class="value-slider">
@@ -209,13 +216,6 @@
               </td>
               <td class="value-number" id="stream-h264-gop-value"></td>
             </tr>
-            <tr>
-              <td>Max FPS:</td>
-              <td class="value-slider">
-                <input class="slider" disabled type="range" id="stream-desired-fps-slider">
-              </td>
-              <td class="value-number" id="stream-desired-fps-value"></td>
-            </tr>
             <tr class="feature-disabled" id="stream-mode">
               <td>Video <a target="_blank" href="https://docs.pikvm.org/webrtc">mode</a>:</td>
               <td>
@@ -224,6 +224,21 @@
                   <label for="stream-mode-radio-mjpeg">MJPEG / HTTP</label>
                   <input type="radio" id="stream-mode-radio-janus" name="stream-mode-radio" value="janus">
                   <label for="stream-mode-radio-janus">H.264 / WebRTC</label>
+                </div>
+              </td>
+            </tr>
+            <tr class="feature-disabled" id="stream-orient">
+              <td>Orientation:</td>
+              <td>
+                <div class="radio-box">
+                  <input checked type="radio" id="stream-orient-radio-0" name="stream-orient-radio" value="0">
+                  <label for="stream-orient-radio-0">Default</label>
+                  <input type="radio" id="stream-orient-radio-90" name="stream-orient-radio" value="90">
+                  <label for="stream-orient-radio-90">90&deg;</label>
+                  <input type="radio" id="stream-orient-radio-180" name="stream-orient-radio" value="180">
+                  <label for="stream-orient-radio-180">180&deg;</label>
+                  <input type="radio" id="stream-orient-radio-270" name="stream-orient-radio" value="270">
+                  <label for="stream-orient-radio-270">270&deg;</label>
                 </div>
               </td>
             </tr>
@@ -238,8 +253,8 @@
           <hr>
           <div class="buttons buttons-row">
             <button class="row33" data-force-hide-menu data-show-window="stream-window">&bull; Show stream</button>
-            <button class="row33" disabled data-force-hide-menu id="stream-screenshot-button">&bull; Screenshot</button>
-            <button class="row33" disabled id="stream-reset-button">Reset stream</button>
+            <button class="row33" data-force-hide-menu id="stream-screenshot-button">&bull; Screenshot</button>
+            <button class="row33" id="stream-reset-button">Reset stream</button>
           </div>
           <div class="feature-disabled" id="hid-outputs">
             <hr>
@@ -337,6 +352,15 @@
                   </td>
                   <td class="value-number" id="hid-mouse-scroll-value"></td>
                 </tr>
+                <tr>
+                      <td>Show the blue dot:</td>
+                      <td align="right">
+                        <div class="switch-box">
+                          <input checked type="checkbox" id="hid-mouse-dot-switch">
+                          <label for="hid-mouse-dot-switch"><span class="switch-inner"></span><span class="switch"></span></label>
+                        </div>
+                      </td>
+                </tr>
               </table>
             </div>
           </details>
@@ -372,7 +396,7 @@
                   <td>Connect main USB to Server:</td>
                   <td align="right">
                     <div class="switch-box">
-                      <input class="gpio-switch" disabled type="checkbox" id="gpio-switch-__v3_usb_breaker__" data-channel="__v3_usb_breaker__" data-confirm-off="Turning off this switch will disconnect the main USB&lt;br&gt;from the server.  Are you sure you want to continue?">
+                      <input class="gpio-switch-__v3_usb_breaker__ gpio-switch" disabled type="checkbox" id="gpio-switch-__v3_usb_breaker__" data-channel="__v3_usb_breaker__" data-confirm-off="Turning off this switch will disconnect the main USB&lt;br&gt;from the server.  Are you sure you want to continue?">
                       <label for="gpio-switch-__v3_usb_breaker__"><span class="switch-inner"></span><span class="switch"></span></label>
                     </div>
                   </td>
@@ -381,7 +405,7 @@
                   <td>Enable locator LED:</td>
                   <td align="right">
                     <div class="switch-box">
-                      <input class="gpio-switch" disabled type="checkbox" id="gpio-switch-__v4_locator__" data-channel="__v4_locator__" data-confirm-off="">
+                      <input class="gpio-switch-__v4_locator__ gpio-switch" disabled type="checkbox" id="gpio-switch-__v4_locator__" data-channel="__v4_locator__" data-confirm-off="">
                       <label for="gpio-switch-__v4_locator__"><span class="switch-inner"></span><span class="switch"></span></label>
                     </div>
                   </td>
@@ -774,7 +798,8 @@
             </div>
             <hr>
             <div class="buttons-row">
-              <button data-force-hide-menu data-shortcut="ControlLeft AltLeft Delete">&bull; Ctrl+Alt+Del</button>
+              <button class="row50" data-force-hide-menu data-shortcut="ControlLeft AltLeft Delete">&bull; Ctrl+Alt+Del</button>
+              <button class="row50" data-force-hide-menu data-shortcut="Power">&bull; Power</button>
             </div>
           </div>
           <hr>
@@ -1964,7 +1989,7 @@
                   <td class="title" colspan="2">The Open Source KVM over IP</td>
                 </tr>
                 <tr>
-                  <td class="copyright" colspan="2">Copyright &copy; 2018-2023 <a target="_blank" href="mailto:mdevaev@gmail.com">Maxim Devaev</a></td>
+                  <td class="copyright" colspan="2">Copyright &copy; 2018-2024 <a target="_blank" href="mailto:mdevaev@gmail.com">Maxim Devaev</a></td>
                 </tr>
               </table>
             </td>
@@ -2011,6 +2036,7 @@
                     <li>AdamBomb</li>
                     <li>adipisicing</li>
                     <li>Adrian Basham</li>
+                    <li>Adrian Popescu</li>
                     <li>Ahmed Syed</li>
                     <li>Alberto Bassi</li>
                     <li>alejandro</li>
@@ -2018,6 +2044,8 @@
                     <li>Alessio Curri</li>
                     <li>Alex T</li>
                     <li>Alex Z</li>
+                    <li>Alexander Karmanov</li>
+                    <li>Alexander Lahuerta</li>
                     <li>Alexander Martin</li>
                     <li>Alexander Pankov</li>
                     <li>Alexandre Jablonski</li>
@@ -2051,6 +2079,7 @@
                     <li>Augusto Becciu</li>
                     <li>AVS Computer</li>
                     <li>awkspace</li>
+                    <li>Badal Patel</li>
                     <li>baddog</li>
                     <li>Bao Tin Hoang</li>
                     <li>Bean Co.</li>
@@ -2071,6 +2100,7 @@
                     <li>bitjoe</li>
                     <li>Bits and Bytes Computers LLC</li>
                     <li>Bjoern Petsch</li>
+                    <li>Blair Hasler</li>
                     <li>Blindside</li>
                     <li>Blue Frog LLC</li>
                     <li>Bootstrapper - Programmierung erklärt</li>
@@ -2079,6 +2109,7 @@
                     <li>Brainspore Networks</li>
                     <li>Branden Shaulis</li>
                     <li>Brandon Daniels</li>
+                    <li>Brian</li>
                     <li>Brian Moses</li>
                     <li>Brian T Mulcahy</li>
                     <li>Brian Vecchiarelli</li>
@@ -2093,8 +2124,11 @@
                     <li>Cameron Tacklind</li>
                     <li>Carl Mercier</li>
                     <li>Carl-Fredrik Johansson</li>
+                    <li>Carlos Eduardo Porter Herrera</li>
+                    <li>Carlos Garcia</li>
                     <li>Carlos Manuel Torres</li>
                     <li>cbad536</li>
+                    <li>César Nascimento</li>
                     <li>CHINATERA LIMITED</li>
                     <li>Chris Blackmon</li>
                     <li>Chris Burton</li>
@@ -2141,8 +2175,10 @@
                     <li>Daniel Davila</li>
                     <li>Danilo Saft</li>
                     <li>Danne</li>
+                    <li>Dariusz Techmański</li>
                     <li>David</li>
                     <li>David Brausewetter</li>
+                    <li>David Davis</li>
                     <li>David Godibadze</li>
                     <li>David Howell</li>
                     <li>David Irvine</li>
@@ -2168,11 +2204,16 @@
                     <li>DogeLabs</li>
                     <li>Dominic Phoon</li>
                     <li>Dominik Klonowski</li>
+                    <li>Donald Hays</li>
                     <li>Edmon Abdul Nur</li>
+                    <li>Edward Wang</li>
                     <li>Egan Ford</li>
                     <li>Elani Ferri</li>
                     <li>Elliot Woo</li>
+                    <li>Entt</li>
                     <li>Eric Phenix</li>
+                    <li>Ethan Shold</li>
+                    <li>Eugene Sukhodolin</li>
                     <li>ewook</li>
                     <li>eye-catcher.com</li>
                     <li>Fabian Druschke</li>
@@ -2197,6 +2238,7 @@
                     <li>Geekworm</li>
                     <li>Genkinger Andreas</li>
                     <li>Geijer</li>
+                    <li>Geoffrey Wright</li>
                     <li>George Becker</li>
                     <li>Georgy Brodsky</li>
                     <li>Gerald</li>
@@ -2208,6 +2250,7 @@
                     <li>Greg Winterstein</li>
                     <li>Gregory Smith</li>
                     <li>Gregory Treantos</li>
+                    <li>grewil</li>
                     <li>Grey Cynic</li>
                     <li>Guenter Honisch</li>
                     <li>Guido Bernacchi</li>
@@ -2226,7 +2269,10 @@
                     <li>HyunohRyu</li>
                     <li>Icculus</li>
                     <li>iks</li>
+                    <li>INFO TRX INC</li>
                     <li>Invader Monks</li>
+                    <li>Ioannis Karageorgos</li>
+                    <li>Isaac</li>
                     <li>IT Lifesaver</li>
                     <li>Ivan Ganev</li>
                     <li>Ivan Josiah Lapis</li>
@@ -2243,10 +2289,12 @@
                     <li>James Edwards</li>
                     <li>James Kocher</li>
                     <li>James Mayhugh</li>
+                    <li>James Noonan</li>
                     <li>James Ye</li>
                     <li>Jamie Murphy</li>
                     <li>Jamie Scott</li>
                     <li>Jan Niehusmann</li>
+                    <li>Jannick Oursin</li>
                     <li>Jari Hiltunen</li>
                     <li>Jason Crossley</li>
                     <li>Jason Downey</li>
@@ -2277,14 +2325,18 @@
                     <li>Joe Hinteregger</li>
                     <li>Joe Ventura</li>
                     <li>Joel Jacobs</li>
+                    <li>Johannes Heigermose</li>
                     <li>John Andersen</li>
                     <li>John Copeland</li>
                     <li>John F Glenn</li>
+                    <li>John Holmes</li>
                     <li>John Kelley</li>
                     <li>John McGovern</li>
                     <li>Johnny Henson</li>
                     <li>Jon Ferguy</li>
+                    <li>Jon-Eric</li>
                     <li>Joni Ruuskanen</li>
+                    <li>Jonas Fischer</li>
                     <li>Jonathan Slenders</li>
                     <li>Jonathan Vaughn</li>
                     <li>Joost Backer</li>
@@ -2329,6 +2381,7 @@
                     <li>LeeNX</li>
                     <li>Leon Siegl</li>
                     <li>Leonard Feineis</li>
+                    <li>Lewis Wild</li>
                     <li>Liran</li>
                     <li>Liviu Dimitriu</li>
                     <li>Lizardo Hernandez</li>
@@ -2366,6 +2419,7 @@
                     <li>Marshall Bjerke</li>
                     <li>Marten Hermans</li>
                     <li>Martin Gasser</li>
+                    <li>Martin Hofbauer</li>
                     <li>Martin Raine</li>
                     <li>Martin Suelmann</li>
                     <li>Martin Wilhelmi</li>
@@ -2388,18 +2442,21 @@
                     <li>Michael Lynch</li>
                     <li>Michael Pennington</li>
                     <li>Michael Sage</li>
+                    <li>Michael Stella</li>
                     <li>Michael Thalmann</li>
                     <li>Michael Wu</li>
                     <li>MichaelZ</li>
                     <li>Michel Bissonnette</li>
                     <li>Mikael Wikström</li>
                     <li>Mike Mason</li>
+                    <li>Mikhael Mariano</li>
                     <li>Milan Múčka</li>
                     <li>Miles Davis</li>
                     <li>Minh Tang</li>
                     <li>Moez Tharani</li>
                     <li>Morgan Helton</li>
                     <li>Myron Weber</li>
+                    <li>Murad Khasawneh</li>
                     <li>N Patel</li>
                     <li>Nathaniel Griswold</li>
                     <li>Nelson Lee</li>
@@ -2488,6 +2545,7 @@
                     <li>Ryan Peacock</li>
                     <li>Samed Ozoglu</li>
                     <li>Sameul Davies</li>
+                    <li>Samuel Cote</li>
                     <li>Samuel Vetsch</li>
                     <li>Samuel Walker</li>
                     <li>Sarah Foster</li>
@@ -2498,7 +2556,9 @@
                     <li>Scott Spicola</li>
                     <li>Scott Tusing</li>
                     <li>Scott Worthington</li>
+                    <li>Scuba</li>
                     <li>Sean</li>
+                    <li>Sean Akers</li>
                     <li>SEAT</li>
                     <li>Sebastian</li>
                     <li>Seonwoo Lee</li>
@@ -2512,6 +2572,7 @@
                     <li>Simon Evans</li>
                     <li>Simon Sundgaard</li>
                     <li>Simplistic Realities</li>
+                    <li>Sirmo</li>
                     <li>Snowy Maslov</li>
                     <li>Solve Technology</li>
                     <li>srepac</li>
@@ -2534,6 +2595,7 @@
                     <li>Tango_Echo_Alpha</li>
                     <li>Tarlak Desaydrone</li>
                     <li>TechBear</li>
+                    <li>techlobo</li>
                     <li>Ted</li>
                     <li>Tejun Heo</li>
                     <li>TheSnowedOne</li>
@@ -2548,12 +2610,14 @@
                     <li>Tim Wilkinson</li>
                     <li>Timo Brinkmann</li>
                     <li>Timothee Besset</li>
+                    <li>TitomusPrime</li>
                     <li>Tobias Schafferhans</li>
                     <li>Tom Lawson</li>
                     <li>Tom York</li>
                     <li>Tomas Kuchta</li>
                     <li>Tomáš hrubý</li>
                     <li>Torsten Droste</li>
+                    <li>Torsten Knoll</li>
                     <li>Tracy Fitch</li>
                     <li>Tristan Schoening</li>
                     <li>Truman Kilen</li>
@@ -2583,6 +2647,7 @@
                     <li>Yaroslav Kulikovskikh</li>
                     <li>Yethal</li>
                     <li>Yevgeniy Kuksenko</li>
+                    <li>Yew Kay Yan</li>
                     <li>Yigal Dar</li>
                     <li>Yogi</li>
                     <li>YURI LEE</li>

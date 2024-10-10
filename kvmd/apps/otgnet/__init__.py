@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2024  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -133,8 +133,8 @@ class _Service:  # pylint: disable=too-many-instance-attributes
         logger.info("CMD: %s", tools.cmdfmt(cmd))
         try:
             return (not (await aioproc.log_process(cmd, logger)).returncode)
-        except Exception as err:
-            logger.exception("Can't execute command: %s", err)
+        except Exception as ex:
+            logger.exception("Can't execute command: %s", ex)
         return False
 
     # =====

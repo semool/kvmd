@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2024  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -93,7 +93,7 @@ class RedfishApi:
             self.__info_manager.get_submanager("meta").get_state(),
         ])
         try:
-            host = meta_state.get("server", {})["host"]
+            host = str(meta_state.get("server", {})["host"])  # type: ignore
         except Exception:
             host = ""
         return make_json_response({
@@ -107,14 +107,14 @@ class RedfishApi:
             },
             "Id": "0",
             "HostName": host,
-            "PowerState": ("On" if atx_state["leds"]["power"] else "Off"),
+            "PowerState": ("On" if atx_state["leds"]["power"] else "Off"),  # type: ignore
         }, wrap_result=False)
 
     @exposed_http("POST", "/redfish/v1/Systems/0/Actions/ComputerSystem.Reset")
-    async def __power_handler(self, request: Request) -> Response:
+    async def __power_handler(self, req: Request) -> Response:
         try:
             action = check_string_in_list(
-                arg=(await request.json())["ResetType"],
+                arg=(await req.json()).get("ResetType"),
                 name="Redfish ResetType",
                 variants=set(self.__actions),
                 lower=False,

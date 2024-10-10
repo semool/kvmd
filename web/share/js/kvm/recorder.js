@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2024  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -67,8 +67,8 @@ export function Recorder() {
 		__recordEvent(event);
 	};
 
-	self.recordPrintEvent = function(text) {
-		__recordEvent({"event_type": "print", "event": {"text": text}});
+	self.recordPrintEvent = function(text, keymap) {
+		__recordEvent({"event_type": "print", "event": {"text": text, "keymap": keymap}});
 	};
 
 	self.recordAtxButtonEvent = function(button) {
@@ -159,6 +159,9 @@ export function Recorder() {
 
 						} else if (event.event_type === "print") {
 							__checkType(event.event.text, "string", "Non-string print text");
+							if (event.event.keymap) {
+								__checkType(event.event.keymap, "string", "Non-string keymap");
+							}
 
 						} else if (event.event_type === "key") {
 							__checkType(event.event.key, "string", "Non-string key code");
@@ -214,8 +217,8 @@ export function Recorder() {
 
 					__events = events;
 					__events_time = events_time;
-				} catch (err) {
-					wm.error(`Invalid script: ${err}`);
+				} catch (ex) {
+					wm.error("Invalid script", `${ex}`);
 				}
 
 				el_input.value = "";
@@ -280,49 +283,49 @@ export function Recorder() {
 				return;
 
 			} else if (event.event_type === "print") {
-				let http = tools.makeRequest("POST", "/api/hid/print?limit=0", function() {
-					if (http.readyState === 4) {
-						if (http.status === 413) {
-							wm.error("Too many text for paste!");
-							__stopProcess();
-						} else if (http.status !== 200) {
-							wm.error("HID paste error:<br>", http.responseText);
-							__stopProcess();
-						} else if (http.status === 200) {
-							__play_timer = setTimeout(() => __runEvents(index + 1, time), 0);
-						}
+				let params = {"limit": 0};
+				if (event.event.keymap) {
+					params["keymap"] = event.event.keymap;
+				}
+				tools.httpPost("/api/hid/print", params, function(http) {
+					if (http.status === 413) {
+						wm.error("Too many text for paste!");
+						__stopProcess();
+					} else if (http.status !== 200) {
+						wm.error("HID paste error", http.responseText);
+						__stopProcess();
+					} else if (http.status === 200) {
+						__play_timer = setTimeout(() => __runEvents(index + 1, time), 0);
 					}
 				}, event.event.text, "text/plain");
 				return;
 
 			} else if (event.event_type === "atx_button") {
-				let http = tools.makeRequest("POST", `/api/atx/click?button=${event.event.button}`, function() {
-					if (http.readyState === 4) {
-						if (http.status !== 200) {
-							wm.error("ATX error:<br>", http.responseText);
-							__stopProcess();
-						} else if (http.status === 200) {
-							__play_timer = setTimeout(() => __runEvents(index + 1, time), 0);
-						}
+				tools.httpPost("/api/atx/click", {"button": event.event.button}, function(http) {
+					if (http.status !== 200) {
+						wm.error("ATX error", http.responseText);
+						__stopProcess();
+					} else if (http.status === 200) {
+						__play_timer = setTimeout(() => __runEvents(index + 1, time), 0);
 					}
 				});
 				return;
 
 			} else if (["gpio_switch", "gpio_pulse"].includes(event.event_type)) {
 				let path = "/api/gpio";
+				let params = {"channel": event.event.channel};
 				if (event.event_type === "gpio_switch") {
-					path += `/switch?channel=${event.event.channel}&state=${event.event.to}`;
+					path += "/switch";
+					params["state"] = event.event.to;
 				} else { // gpio_pulse
-					path += `/pulse?channel=${event.event.channel}`;
+					path += "/pulse";
 				}
-				let http = tools.makeRequest("POST", path, function() {
-					if (http.readyState === 4) {
-						if (http.status !== 200) {
-							wm.error("GPIO error:<br>", http.responseText);
-							__stopProcess();
-						} else if (http.status === 200) {
-							__play_timer = setTimeout(() => __runEvents(index + 1, time), 0);
-						}
+				tools.httpPost(path, params, function(http) {
+					if (http.status !== 200) {
+						wm.error("GPIO error", http.responseText);
+						__stopProcess();
+					} else if (http.status === 200) {
+						__play_timer = setTimeout(() => __runEvents(index + 1, time), 0);
 					}
 				});
 				return;

@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2024  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -76,8 +76,8 @@ def _load_libtesseract() -> (ctypes.CDLL | None):
             setattr(func, "restype", restype)
             setattr(func, "argtypes", argtypes)
         return lib
-    except Exception as err:
-        warnings.warn(f"Can't load libtesseract: {err}", RuntimeWarning)
+    except Exception as ex:
+        warnings.warn(f"Can't load libtesseract: {ex}", RuntimeWarning)
         return None
 
 
@@ -145,12 +145,12 @@ class Ocr:
                         if left < right and top < bottom:
                             image_cropped = image.crop((left, top, right, bottom))
                             image.close()
-                            image = image_cropped
+                            image = image_cropped  # type: ignore
 
                     ImageOps.grayscale(image)
                     image_resized = image.resize((int(image.size[0] * 2), int(image.size[1] * 2)), PilImage.Resampling.BICUBIC)
                     image.close()
-                    image = image_resized
+                    image = image_resized  # type: ignore
 
                     _libtess.TessBaseAPISetImage(api, image.tobytes("raw", "RGB"), image.width, image.height, 3, image.width * 3)
                     text_ptr = None

@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2024  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -112,9 +112,9 @@ def shield_fg(aw: Awaitable):  # type: ignore
         if inner.cancelled():
             outer.forced_cancel()
         else:
-            err = inner.exception()
-            if err is not None:
-                outer.set_exception(err)
+            ex = inner.exception()
+            if ex is not None:
+                outer.set_exception(ex)
             else:
                 outer.set_result(inner.result())
 
@@ -202,7 +202,7 @@ async def wait_infinite() -> None:
         await asyncio.sleep(3600)
 
 
-async def wait_first(*aws: (asyncio.Future | asyncio.Task)) -> tuple[set[asyncio.Task], set[asyncio.Task]]:
+async def wait_first(*aws: asyncio.Task) -> tuple[set[asyncio.Task], set[asyncio.Task]]:
     return (await asyncio.wait(list(aws), return_when=asyncio.FIRST_COMPLETED))
 
 

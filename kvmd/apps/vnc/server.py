@@ -47,6 +47,7 @@ from ...clients.streamer import BaseStreamerClient
 
 from ... import tools
 from ... import aiotools
+from ... import network
 
 from .rfb import RfbClient
 from .rfb.stream import rfb_format_remote
@@ -209,12 +210,12 @@ class _Client(RfbClient):  # pylint: disable=too-many-instance-attributes
                             await self.__queue_frame(frame)
                         else:
                             await self.__queue_frame("No signal")
-            except StreamerError as err:
-                if isinstance(err, StreamerPermError):
+            except StreamerError as ex:
+                if isinstance(ex, StreamerPermError):
                     streamer = self.__get_default_streamer()
-                    logger.info("%s [streamer]: Permanent error: %s; switching to %s ...", self._remote, err, streamer)
+                    logger.info("%s [streamer]: Permanent error: %s; switching to %s ...", self._remote, ex, streamer)
                 else:
-                    logger.info("%s [streamer]: Waiting for stream: %s", self._remote, err)
+                    logger.info("%s [streamer]: Waiting for stream: %s", self._remote, ex)
                 await self.__queue_frame("Waiting for stream ...")
                 await asyncio.sleep(1)
 
@@ -444,7 +445,7 @@ class VncServer:  # pylint: disable=too-many-instance-attributes
         vnc_auth_manager: VncAuthManager,
     ) -> None:
 
-        self.__host = host
+        self.__host = network.get_listen_host(host)
         self.__port = port
         self.__max_clients = max_clients
 
@@ -480,8 +481,8 @@ class VncServer:  # pylint: disable=too-many-instance-attributes
                 try:
                     async with kvmd.make_session("", "") as kvmd_session:
                         none_auth_only = await kvmd_session.auth.check()
-                except (aiohttp.ClientError, asyncio.TimeoutError) as err:
-                    logger.error("%s [entry]: Can't check KVMD auth mode: %s", remote, tools.efmt(err))
+                except (aiohttp.ClientError, asyncio.TimeoutError) as ex:
+                    logger.error("%s [entry]: Can't check KVMD auth mode: %s", remote, tools.efmt(ex))
                     return
 
                 await _Client(

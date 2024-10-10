@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2018-2023  Maxim Devaev <mdevaev@gmail.com>               #
+#    Copyright (C) 2018-2024  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -144,11 +144,66 @@ function __WindowManager() {
 
 	/************************************************************************/
 
-	self.info = (...args) => __modalDialog("Info", args.join(" "), true, false, null);
-	self.error = (...args) => __modalDialog("Error", args.join(" "), true, false, null);
-	self.confirm = (...args) => __modalDialog("Question", args.join(" "), true, true, null);
+	self.copyTextToClipboard = function(text) {
+		let workaround = function(ex) {
+			// https://stackoverflow.com/questions/60317969/document-execcommandcopy-not-working-even-though-the-dom-element-is-created
+			__modalDialog("Info", "Press OK to copy the text to the clipboard", true, false).then(function() {
+				tools.error("copyTextToClipboard(): navigator.clipboard.writeText() is not working:", ex);
+				tools.info("copyTextToClipboard(): Trying a workaround...");
 
-	var __modalDialog = function(header, text, ok, cancel, parent) {
+				let el = document.createElement("textarea");
+				el.readonly = true;
+				el.contentEditable = true;
+				el.style.position = "absolute";
+				el.style.top = "-1000px";
+				el.value = text;
+				document.body.appendChild(el);
+
+				// Select the content of the textarea
+				el.select(); // Ordinary browsers
+				el.setSelectionRange(0, el.value.length); // iOS
+
+				try {
+					ex = (document.execCommand("copy") ? null : "Unknown error");
+				} catch (ex) { // eslint-disable-line no-unused-vars
+				}
+
+				// Remove the added textarea again:
+				document.body.removeChild(el);
+
+				if (ex) {
+					tools.error("copyTextToClipboard(): Workaround failed:", ex);
+					self.error("Can't copy text to the clipboard", `${ex}`);
+				}
+			});
+		};
+		if (navigator.clipboard) {
+			navigator.clipboard.writeText(text).then(function() {
+				self.info("The text has been copied to the clipboard");
+			}, function(ex) {
+				workaround(ex);
+			});
+		} else {
+			workaround("navigator.clipboard is not available");
+		}
+	};
+
+	self.info = (html, ...args) => __modalCodeDialog("Info", html, args.join("\n"), true, false);
+	self.error = (html, ...args) => __modalCodeDialog("Error", html, args.join("\n"), true, false);
+	self.confirm = (html, ...args) => __modalCodeDialog("Question", html, args.join("\n"), true, true);
+	self.modal = (header, html, ok, cancel) => __modalDialog(header, html, ok, cancel);
+
+	var __modalCodeDialog = function(header, html, code, ok, cancel) {
+		let create_content = function(el_content) {
+			if (code) {
+				html += `<br><br><div class="code"><pre style="margin:0px">${tools.escape(code)}</pre></div>`;
+			}
+			el_content.innerHTML = html;
+		};
+		return __modalDialog(header, create_content, ok, cancel);
+	};
+
+	var __modalDialog = function(header, html, ok, cancel, parent=null) {
 		let el_active_menu = (document.activeElement && document.activeElement.closest(".menu"));
 
 		let el_modal = document.createElement("div");
@@ -162,24 +217,50 @@ function __WindowManager() {
 
 		let el_header = document.createElement("div");
 		el_header.className = "modal-header";
-		el_header.innerHTML = header;
+		el_header.innerText = header;
 		el_window.appendChild(el_header);
 
 		let el_content = document.createElement("div");
 		el_content.className = "modal-content";
-		el_content.innerHTML = text;
 		el_window.appendChild(el_content);
+
+		let el_buttons = document.createElement("div");
+		el_buttons.classList.add("modal-buttons", "buttons-row");
+		el_window.appendChild(el_buttons);
+
+		let el_cancel_button = null;
+		let el_ok_button = null;
+		if (cancel) {
+			el_cancel_button = document.createElement("button");
+			el_cancel_button.className = "row100";
+			el_cancel_button.innerText = "Cancel";
+			el_buttons.appendChild(el_cancel_button);
+		}
+		if (ok) {
+			el_ok_button = document.createElement("button");
+			el_ok_button.className = "row100";
+			el_ok_button.innerText = "OK";
+			el_buttons.appendChild(el_ok_button);
+		}
+		if (ok && cancel) {
+			el_ok_button.className = "row50";
+			el_cancel_button.className = "row50";
+		}
+
+		el_window.onkeyup = function(event) {
+			event.preventDefault();
+			if (ok && event.code === "Enter") {
+				el_ok_button.click();
+			} else if (cancel && event.code === "Escape") {
+				el_cancel_button.click();
+			}
+		};
 
 		let promise = null;
 		if (ok || cancel) {
 			promise = new Promise(function(resolve) {
-				let el_buttons = document.createElement("div");
-				el_buttons.className = "modal-buttons";
-				el_window.appendChild(el_buttons);
-
 				function close(retval) {
 					__closeWindow(el_window);
-					el_modal.outerHTML = "";
 					let index = __windows.indexOf(el_modal);
 					if (index !== -1) {
 						__windows.splice(index, 1);
@@ -190,38 +271,27 @@ function __WindowManager() {
 						__activateLastWindow(el_modal);
 					}
 					resolve(retval);
+					// Так как resolve() асинхронный, надо выполнить в эвентлупе после него
+					setTimeout(function() { el_modal.outerHTML = ""; }, 0);
 				}
 
 				if (cancel) {
-					var el_cancel_button = document.createElement("button");
-					el_cancel_button.innerHTML = "Cancel";
 					tools.el.setOnClick(el_cancel_button, () => close(false));
-					el_buttons.appendChild(el_cancel_button);
 				}
 				if (ok) {
-					var el_ok_button = document.createElement("button");
-					el_ok_button.innerHTML = "OK";
 					tools.el.setOnClick(el_ok_button, () => close(true));
-					el_buttons.appendChild(el_ok_button);
 				}
-				if (ok && cancel) {
-					el_ok_button.className = "row50";
-					el_cancel_button.className = "row50";
-				}
-
-				el_window.onkeyup = function(event) {
-					event.preventDefault();
-					if (ok && event.code === "Enter") {
-						el_ok_button.click();
-					} else if (cancel && event.code === "Escape") {
-						el_cancel_button.click();
-					}
-				};
 			});
 		}
 
 		__windows.push(el_modal);
 		(parent || document.fullscreenElement || document.body).appendChild(el_modal);
+		if (typeof html === "function") {
+			// Это должно быть здесь, потому что элемент должен иметь родителя чтобы существовать
+			html(el_content, el_ok_button);
+		} else {
+			el_content.innerHTML = html;
+		}
 		__activateWindow(el_modal);
 
 		return promise;
