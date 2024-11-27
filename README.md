@@ -6,7 +6,7 @@ This repository contains the configuration and code of KVMD, the main PiKVM daem
 If your request does not relate directly to this codebase, please send it to issues of the [PiKVM](https://github.com/pikvm/pikvm/issues) repository.
 
 # Patch for 2 or 3 Daisychained ezcoo Switches
-https://github.com/semool/kvmd/commit/
+https://github.com/semool/kvmd/commit/b9fd5b03dfe4b4500ac26c0685ae9fc4c908ca8a
 
 # Hue Plugin to Control SmartPlugs - Get Api Token
 - http://[BridgeIP]/debug/clip.html
@@ -18,6 +18,7 @@ https://github.com/semool/kvmd/commit/
 ## Links to old Patch Versions
 <details>
   <summary>Click to expand!</summary>
+
 # 2x Ezcoo KVM 4x Switch Patch (7 usable Ports)
 https://github.com/semool/kvmd/commit/1f9448cbc07cefbe0d32b7178596178e8cac0b03
 
