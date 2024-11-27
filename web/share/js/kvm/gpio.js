@@ -68,6 +68,36 @@ export function Gpio(__recorder) {
 			for (let el of $$(`__gpio-led-${ch}`)) {
 				__setLedState(el, inputs[ch].state);
 			}
+			/* Patch for 2 or 3 Daisychained ezcoo Switches */
+			/* Disable Status LED in Webif for all ezcoo2/3 Ports when a Port on ezcoo1 is selected */
+			for (let channel of ["ch1_led", "ch2_led", "ch3_led"]) {
+				if (inputs[channel].state) {
+					/* alert("Active Channel 1or2or3: " + ch); */
+					for (let channel of ["ch5_led", "ch6_led", "ch7_led", "ch8_led", "ch9_led", "ch10_led", "ch11_led", "ch12_led"]) {
+						if (inputs[channel].state) {
+							for (let el of $$(`__gpio-led-${channel}`)) {
+								/* alert("DISABLE Channel 5-12: " + channel); */
+								__setLedState(el, false);
+							}
+						}
+					}
+				}
+			}
+			/* Disable Status LED in Webif for all ezcoo3 Ports when a Port on ezcoo2 is selected */
+			for (let channel of ["ch5_led", "ch6_led", "ch7_led"]) {
+				if (inputs[channel].state) {
+					/* alert("Active Channel 5or6or7: " + ch); */
+					for (let channel of ["ch9_led", "ch10_led", "ch11_led", "ch12_led"]) {
+						if (inputs[channel].state) {
+							for (let el of $$(`__gpio-led-${channel}`)) {
+								/* alert("DISABLE Channel 9-12: " + channel); */
+								__setLedState(el, false);
+							}
+						}
+					}
+				}
+			}
+			/* End */
 		}
 	};
 

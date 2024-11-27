@@ -285,16 +285,25 @@ class UserGpio:
                 yield full
             else:
                 new = await self.__get_io_state()
-                diff: dict = {}
-                for sub in ["inputs", "outputs"]:
-                    for ch in new[sub]:
-                        if new[sub][ch] != prev[sub].get(ch):
-                            if sub not in diff:
-                                diff[sub] = {}
-                            diff[sub][ch] = new[sub][ch]
-                if diff:
-                    prev = copy.deepcopy(new)
-                    yield {"state": diff}
+                # Patch for Daisychained ezcoo Switches
+                # Always copy the complete gpio states instead of diff
+                # Disabled diff Code:
+                ##########################
+                #diff: dict = {}
+                #for sub in ["inputs", "outputs"]:
+                #    for ch in new[sub]:
+                #        if new[sub][ch] != prev[sub].get(ch):
+                #            if sub not in diff:
+                #                diff[sub] = {}
+                #            diff[sub][ch] = new[sub][ch]
+                #if diff:
+                #    prev = copy.deepcopy(new)
+                #    yield {"state": diff}
+                ##########################
+                # Full State copy:
+                prev = copy.deepcopy(new)
+                yield {"state": new}
+                # End
 
     async def __get_io_state(self) -> dict:
         return {

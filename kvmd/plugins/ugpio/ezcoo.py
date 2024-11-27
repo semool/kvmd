@@ -184,6 +184,26 @@ class Plugin(BaseUserGpioDriver):  # pylint: disable=too-many-instance-attribute
         )
         tty.write(cmd * 2)  # Twice because of ezcoo bugs
         tty.flush()
+        # Patch for 2 or 3 Daisychained ezcoo Switches
+        device_udev = []
+        # Switch to Passthrough Port on ezcoo1 when a Port on ezcoo2 is selected in Webif
+        if self.__device_path == "/dev/ezcoo2":
+           device_udev = ["/dev/ezcoo1"]
+        # Switch to Passthrough Port on ezcoo1 and ezcoo2 when a Port on ezcoo3 is selected in Webif
+        if self.__device_path == "/dev/ezcoo3":
+           device_udev = ["/dev/ezcoo1", "/dev/ezcoo2"]
+        # Switching
+        if device_udev:
+           for device in device_udev:
+              tty = serial.Serial(device, self.__speed, timeout=self.__read_timeout)
+              channel= int(3) # Passthrough Port on ezcoo1/2
+              cmd = b"%s OUT1 VS IN%d\n" % (
+                  (b"SET" if self.__protocol == 1 else b"EZS"),
+                  channel + 1,
+              )
+              tty.write(cmd * 2)
+              tty.flush()
+        # End
 
     def __str__(self) -> str:
         return f"Ezcoo({self._instance_name})"
