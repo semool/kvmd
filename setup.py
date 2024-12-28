@@ -56,7 +56,7 @@ def main() -> None:
 
     setup(
         name="kvmd",
-        version="4.25",
+        version="4.32",
         url="https://github.com/pikvm/kvmd",
         license="GPLv3",
         author="Maxim Devaev",
@@ -83,8 +83,10 @@ def main() -> None:
             "kvmd.clients",
             "kvmd.apps",
             "kvmd.apps.kvmd",
+            "kvmd.apps.kvmd.switch",
             "kvmd.apps.kvmd.info",
             "kvmd.apps.kvmd.api",
+            "kvmd.apps.media",
             "kvmd.apps.pst",
             "kvmd.apps.pstrun",
             "kvmd.apps.otg",
@@ -115,6 +117,7 @@ def main() -> None:
         entry_points={
             "console_scripts": [
                 "kvmd = kvmd.apps.kvmd:main",
+                "kvmd-media = kvmd.apps.media:main",
                 "kvmd-pst = kvmd.apps.pst:main",
                 "kvmd-pstrun = kvmd.apps.pstrun:main",
                 "kvmd-otg = kvmd.apps.otg:main",

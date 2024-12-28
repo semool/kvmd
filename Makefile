@@ -86,6 +86,7 @@ tox: testenv
 			&& cp /usr/share/kvmd/configs.default/kvmd/*.yaml /etc/kvmd \
 			&& cp /usr/share/kvmd/configs.default/kvmd/*passwd /etc/kvmd \
 			&& cp /usr/share/kvmd/configs.default/kvmd/*.secret /etc/kvmd \
+			&& cp /usr/share/kvmd/configs.default/kvmd/edid/v2.hex /etc/kvmd/switch-edid.hex \
 			&& cp /usr/share/kvmd/configs.default/kvmd/main/$(if $(P),$(P),$(DEFAULT_PLATFORM)).yaml /etc/kvmd/main.yaml \
 			&& mkdir -p /etc/kvmd/override.d \
 			&& cp /src/testenv/$(if $(P),$(P),$(DEFAULT_PLATFORM)).override.yaml /etc/kvmd/override.yaml \
@@ -102,6 +103,7 @@ $(TESTENV_GPIO):
 
 run: testenv $(TESTENV_GPIO)
 	- $(DOCKER) run --rm --name kvmd \
+			--ipc=shareable \
 			--privileged \
 			--volume `pwd`/testenv/run:/run/kvmd:rw \
 			--volume `pwd`/testenv:/testenv:ro \
@@ -128,6 +130,7 @@ run: testenv $(TESTENV_GPIO)
 			&& cp /usr/share/kvmd/configs.default/kvmd/*.yaml /etc/kvmd \
 			&& cp /usr/share/kvmd/configs.default/kvmd/*passwd /etc/kvmd \
 			&& cp /usr/share/kvmd/configs.default/kvmd/*.secret /etc/kvmd \
+			&& cp /usr/share/kvmd/configs.default/kvmd/edid/v2.hex /etc/kvmd/switch-edid.hex \
 			&& cp /usr/share/kvmd/configs.default/kvmd/main/$(if $(P),$(P),$(DEFAULT_PLATFORM)).yaml /etc/kvmd/main.yaml \
 			&& ln -s /testenv/web.css /etc/kvmd/web.css \
 			&& mkdir -p /etc/kvmd/override.d \
@@ -155,6 +158,7 @@ run-cfg: testenv
 			&& cp /usr/share/kvmd/configs.default/kvmd/*.yaml /etc/kvmd \
 			&& cp /usr/share/kvmd/configs.default/kvmd/*passwd /etc/kvmd \
 			&& cp /usr/share/kvmd/configs.default/kvmd/*.secret /etc/kvmd \
+			&& cp /usr/share/kvmd/configs.default/kvmd/edid/v2.hex /etc/kvmd/switch-edid.hex \
 			&& cp /usr/share/kvmd/configs.default/kvmd/main/$(if $(P),$(P),$(DEFAULT_PLATFORM)).yaml /etc/kvmd/main.yaml \
 			&& mkdir -p /etc/kvmd/override.d \
 			&& cp /testenv/$(if $(P),$(P),$(DEFAULT_PLATFORM)).override.yaml /etc/kvmd/override.yaml \
@@ -178,6 +182,7 @@ run-ipmi: testenv
 			&& cp /usr/share/kvmd/configs.default/kvmd/*.yaml /etc/kvmd \
 			&& cp /usr/share/kvmd/configs.default/kvmd/*passwd /etc/kvmd \
 			&& cp /usr/share/kvmd/configs.default/kvmd/*.secret /etc/kvmd \
+			&& cp /usr/share/kvmd/configs.default/kvmd/edid/v2.hex /etc/kvmd/switch-edid.hex \
 			&& cp /usr/share/kvmd/configs.default/kvmd/main/$(if $(P),$(P),$(DEFAULT_PLATFORM)).yaml /etc/kvmd/main.yaml \
 			&& mkdir -p /etc/kvmd/override.d \
 			&& cp /testenv/$(if $(P),$(P),$(DEFAULT_PLATFORM)).override.yaml /etc/kvmd/override.yaml \
@@ -187,6 +192,7 @@ run-ipmi: testenv
 
 run-vnc: testenv
 	- $(DOCKER) run --rm --name kvmd-vnc \
+			--ipc=container:kvmd \
 			--volume `pwd`/testenv/run:/run/kvmd:rw \
 			--volume `pwd`/testenv:/testenv:ro \
 			--volume `pwd`/kvmd:/kvmd:ro \
@@ -201,6 +207,7 @@ run-vnc: testenv
 			&& cp /usr/share/kvmd/configs.default/kvmd/*.yaml /etc/kvmd \
 			&& cp /usr/share/kvmd/configs.default/kvmd/*passwd /etc/kvmd \
 			&& cp /usr/share/kvmd/configs.default/kvmd/*.secret /etc/kvmd \
+			&& cp /usr/share/kvmd/configs.default/kvmd/edid/v2.hex /etc/kvmd/switch-edid.hex \
 			&& cp /usr/share/kvmd/configs.default/kvmd/main/$(if $(P),$(P),$(DEFAULT_PLATFORM)).yaml /etc/kvmd/main.yaml \
 			&& mkdir -p /etc/kvmd/override.d \
 			&& cp /testenv/$(if $(P),$(P),$(DEFAULT_PLATFORM)).override.yaml /etc/kvmd/override.yaml \

@@ -502,6 +502,37 @@ def _get_config_scheme() -> dict:
                     "table": Option([], type=valid_ugpio_view_table),
                 },
             },
+
+            "switch": {
+                "device":       Option("/dev/kvmd-switch", type=valid_abs_path, unpack_as="device_path"),
+                "default_edid": Option("/etc/kvmd/switch-edid.hex", type=valid_abs_path, unpack_as="default_edid_path"),
+            },
+        },
+
+        "media": {
+            "server": {
+                "unix":              Option("/run/kvmd/media.sock", type=valid_abs_path, unpack_as="unix_path"),
+                "unix_rm":           Option(True,  type=valid_bool),
+                "unix_mode":         Option(0o660, type=valid_unix_mode),
+                "heartbeat":         Option(15.0,  type=valid_float_f01),
+                "access_log_format": Option("[%P / %{X-Real-IP}i] '%r' => %s; size=%b ---"
+                                            " referer='%{Referer}i'; user_agent='%{User-Agent}i'"),
+            },
+
+            "memsink": {
+                "jpeg": {
+                    "sink":             Option("",  unpack_as="obj"),
+                    "lock_timeout":     Option(1.0, type=valid_float_f01),
+                    "wait_timeout":     Option(1.0, type=valid_float_f01),
+                    "drop_same_frames": Option(0.0, type=valid_float_f0),
+                },
+                "h264": {
+                    "sink":             Option("",  unpack_as="obj"),
+                    "lock_timeout":     Option(1.0, type=valid_float_f01),
+                    "wait_timeout":     Option(1.0, type=valid_float_f01),
+                    "drop_same_frames": Option(0.0, type=valid_float_f0),
+                },
+            },
         },
 
         "pst": {
@@ -532,7 +563,7 @@ def _get_config_scheme() -> dict:
             "device_version": Option(-1,     type=functools.partial(valid_number, min=-1, max=0xFFFF)),
             "usb_version":    Option(0x0200, type=valid_otg_id),
             "max_power":      Option(250,    type=functools.partial(valid_number, min=50, max=500)),
-            "remote_wakeup":  Option(False,  type=valid_bool),
+            "remote_wakeup":  Option(True,   type=valid_bool),
 
             "gadget":     Option("kvmd", type=valid_otg_gadget),
             "config":     Option("PiKVM device", type=valid_stripped_string_not_empty),
@@ -548,6 +579,9 @@ def _get_config_scheme() -> dict:
                         "start": Option(True, type=valid_bool),
                     },
                     "mouse": {
+                        "start": Option(True, type=valid_bool),
+                    },
+                    "mouse_alt": {
                         "start": Option(True, type=valid_bool),
                     },
                 },
