@@ -262,6 +262,15 @@
               </td>
               <td class="value-number" id="stream-audio-volume-value"></td>
             </tr>
+            <tr class="feature-disabled" id="stream-mic">
+                  <td>Microphone:</td>
+                  <td align="right">
+                    <div class="switch-box">
+                      <input disabled type="checkbox" id="stream-mic-switch">
+                      <label for="stream-mic-switch"><span class="switch-inner"></span><span class="switch"></span></label>
+                    </div>
+                  </td>
+            </tr>
           </table>
           <hr>
           <div class="buttons buttons-row">
@@ -904,6 +913,20 @@
             </tr>
           </table>
           <hr>
+          <div class="hidden" id="switch-message-update">
+                <div class="text">
+                  <table>
+                    <tr>
+                      <td rowspan="2"><img class="sign " src="/share/svg/info.svg"></td>
+                      <td style="line-height:1.5"><b>Good news! Your switch is ready to get the firmware update</b></td>
+                    </tr>
+                    <tr>
+                      <td><sup style="line-height:1">Please <a target="_blank" href="https://docs.pikvm.org/switch/#firmware-updating">follow the instructions</a> when you decide to install it.</sup></td>
+                    </tr>
+                  </table>
+                </div>
+            <hr>
+          </div>
               <table class="kv">
                 <tr>
                       <td>Ask ATX click confirmation:</td>

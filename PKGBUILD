@@ -39,15 +39,15 @@ for _variant in "${_variants[@]}"; do
 	pkgname+=(kvmd-platform-$_platform-$_board)
 done
 pkgbase=kvmd
-pkgver=4.38
+pkgver=4.48
 pkgrel=1
 pkgdesc="The main PiKVM daemon"
 url="https://github.com/pikvm/kvmd"
 license=(GPL)
 arch=(any)
 depends=(
-	"python>=3.12"
-	"python<3.13"
+	"python>=3.13"
+	"python<3.14"
 	python-yaml
 	python-aiohttp
 	python-aiofiles
@@ -79,6 +79,7 @@ depends=(
 	python-mako
 	python-luma-oled
 	python-pyusb
+	python-pyudev
 	"libgpiod>=2.1"
 	freetype2
 	"v4l-utils>=1.22.1-1"
@@ -93,7 +94,7 @@ depends=(
 	certbot
 	platform-io-access
 	raspberrypi-utils
-	"ustreamer>=6.21-2"
+	"ustreamer>=6.26"
 
 	# Systemd UDEV bug
 	"systemd>=248.3-2"
@@ -167,7 +168,7 @@ package_kvmd() {
 	install -DTm644 configs/os/tmpfiles.conf "$pkgdir/usr/lib/tmpfiles.d/kvmd.conf"
 
 	mkdir -p "$pkgdir/usr/share/kvmd"
-	cp -r {hid,web,extras,contrib/keymaps} "$pkgdir/usr/share/kvmd"
+	cp -r {switch,hid,web,extras,contrib/keymaps} "$pkgdir/usr/share/kvmd"
 	find "$pkgdir/usr/share/kvmd/web" -name '*.pug' -exec rm -f '{}' \;
 
 	local _cfg_default="$pkgdir/usr/share/kvmd/configs.default"
