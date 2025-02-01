@@ -39,7 +39,7 @@ for _variant in "${_variants[@]}"; do
 	pkgname+=(kvmd-platform-$_platform-$_board)
 done
 pkgbase=kvmd
-pkgver=4.48
+pkgver=4.50
 pkgrel=1
 pkgdesc="The main PiKVM daemon"
 url="https://github.com/pikvm/kvmd"
@@ -53,6 +53,8 @@ depends=(
 	python-aiofiles
 	python-async-lru
 	python-passlib
+	# python-bcrypt is needed for passlib
+	python-bcrypt
 	python-pyotp
 	python-qrcode
 	python-periphery
@@ -210,7 +212,7 @@ for _variant in "${_variants[@]}"; do
 		cd \"kvmd-\$pkgver\"
 
 		pkgdesc=\"PiKVM platform configs - $_platform for $_board\"
-		depends=(kvmd=$pkgver-$pkgrel \"linux-rpi-pikvm>=6.6.45-1\" \"raspberrypi-bootloader-pikvm>=20240818-1\")
+		depends=(kvmd=$pkgver-$pkgrel \"linux-rpi-pikvm>=6.6.45-10\" \"raspberrypi-bootloader-pikvm>=20240818-1\")
 
 		backup=(
 			etc/sysctl.d/99-kvmd.conf
