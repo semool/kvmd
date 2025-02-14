@@ -23,6 +23,7 @@
 "use strict";
 
 
+import {ROOT_PREFIX} from "../vars.js";
 import {tools, $} from "../tools.js";
 
 
@@ -31,7 +32,7 @@ export function MjpegStreamer(__setActive, __setInactive, __setInfo) {
 
 	/************************************************************************/
 
-	var __key = tools.makeId();
+	var __key = tools.makeRandomId();
 	var __id = "";
 	var __fps = -1;
 	var __state = null;
@@ -72,7 +73,7 @@ export function MjpegStreamer(__setActive, __setInactive, __setInfo) {
 
 	self.stopStream = function() {
 		self.ensureStream(null);
-		let blank = "/share/png/blank-stream.png";
+		let blank = `${ROOT_PREFIX}share/png/blank-stream.png`;
 		if (!String.prototype.endsWith.call($("stream-image").src, blank)) {
 			$("stream-image").src = blank;
 		}
@@ -90,7 +91,7 @@ export function MjpegStreamer(__setActive, __setInactive, __setInfo) {
 
 	var __setStreamInactive = function() {
 		let old_fps = __fps;
-		__key = tools.makeId();
+		__key = tools.makeRandomId();
 		__id = "";
 		__fps = -1;
 		__state = null;
@@ -138,7 +139,7 @@ export function MjpegStreamer(__setActive, __setInactive, __setInfo) {
 			__setStreamInactive();
 			__stopChecking();
 
-			let path = `/streamer/stream?key=${__key}`;
+			let path = `${ROOT_PREFIX}streamer/stream?key=${encodeURIComponent(__key)}`;
 			if (tools.browser.is_safari || tools.browser.is_ios) {
 				// uStreamer fix for WebKit
 				__logInfo("Using dual_final_frames=1 to fix WebKit bugs");

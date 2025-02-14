@@ -96,7 +96,7 @@ export function JanusStreamer(__setActive, __setInactive, __setInfo, __orient, _
 			__setInfo(false, false, "");
 			__logInfo("Starting Janus ...");
 			__janus = new _Janus({
-				"server": `${tools.is_https ? "wss" : "ws"}://${location.host}/janus/ws`,
+				"server": tools.makeWsUrl("janus/ws"),
 				"ipv6": true,
 				"destroyOnUnload": false,
 				"success": __attachJanus,
@@ -297,7 +297,7 @@ export function JanusStreamer(__setActive, __setInactive, __setInfo, __orient, _
 				// Chrome sends `muted` notifiation for tracks in `disconnected` ICE state
 				// and Janus.js just removes muted track from list of available tracks.
 				// But track still exists actually so it's safe to just ignore
-				// reason == "mute" and "unmute".
+				// reason === "mute" and "unmute".
 				let reason = (meta || {}).reason;
 				__logInfo("Got onremotetrack:", id, added, reason, track, meta);
 				if (added && reason === "created") {

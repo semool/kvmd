@@ -20,43 +20,39 @@
 # ========================================================================== #
 
 
-from aiohttp.web import Request
-from aiohttp.web import StreamResponse
-
-from ....errors import OperationError
-
-from ....htserver import exposed_http
-from ....htserver import start_streaming
-
-from ....validators.basic import valid_bool
-from ....validators.kvm import valid_log_seek
-
-from ..logreader import LogReader
+from passlib.context import CryptContext
+from passlib.apache import HtpasswdFile as _ApacheHtpasswdFile
+from passlib.apache import htpasswd_context as _apache_htpasswd_ctx
 
 
 # =====
-class LogReaderDisabledError(OperationError):
-    def __init__(self) -> None:
-        super().__init__("LogReader is disabled")
+_SHA512 = "ldap_salted_sha512"
+_SHA256 = "ldap_salted_sha256"
 
 
-class LogApi:
-    def __init__(self, log_reader: (LogReader | None)) -> None:
-        self.__log_reader = log_reader
+def _make_kvmd_htpasswd_context() -> CryptContext:
+    schemes = list(_apache_htpasswd_ctx.schemes())
+    for alg in [_SHA256, _SHA512]:
+        if alg in schemes:
+            schemes.remove(alg)
+        schemes.insert(0, alg)
+    assert schemes[0] == _SHA512
+    return CryptContext(
+        schemes=schemes,
+        default=_SHA512,
+        bcrypt__ident="2y",  # See note in the passlib.apache
+    )
 
-    # =====
 
-    @exposed_http("GET", "/log")
-    async def __log_handler(self, req: Request) -> StreamResponse:
-        if self.__log_reader is None:
-            raise LogReaderDisabledError()
-        seek = valid_log_seek(req.query.get("seek", 0))
-        follow = valid_bool(req.query.get("follow", False))
-        resp = await start_streaming(req, "text/plain")
-        async for record in self.__log_reader.poll_log(seek, follow):
-            await resp.write(("[%s %s] --- %s" % (
-                record["dt"].strftime("%Y-%m-%d %H:%M:%S"),
-                record["service"],
-                record["msg"],
-            )).encode("utf-8") + b"\r\n")
-        return resp
+_kvmd_htpasswd_ctx = _make_kvmd_htpasswd_context()
+
+
+# =====
+class KvmdHtpasswdFile(_ApacheHtpasswdFile):
+    def __init__(self, path: str, new: bool=False) -> None:
+        super().__init__(
+            path=path,
+            default_scheme=_SHA512,
+            context=_kvmd_htpasswd_ctx,
+            new=new,
+        )

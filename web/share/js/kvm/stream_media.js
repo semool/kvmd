@@ -26,7 +26,7 @@
 import {tools, $} from "../tools.js";
 
 
-export function MediaStreamer(__setActive, __setInactive, __setInfo) {
+export function MediaStreamer(__setActive, __setInactive, __setInfo, __orient) {
 	var self = this;
 
 	/************************************************************************/
@@ -43,11 +43,12 @@ export function MediaStreamer(__setActive, __setInactive, __setInfo) {
 	var __ctx = __canvas.getContext("2d");
 
 	var __state = null;
-	var __frames = 0;
+	var __fps_accum = 0;
 
 	/************************************************************************/
 
-	self.getName = () => "HTTP H.264";
+	self.getOrientation = () => __orient;
+	self.getName = () => "Direct H.264";
 	self.getMode = () => "media";
 
 	self.getResolution = function() {
@@ -79,14 +80,15 @@ export function MediaStreamer(__setActive, __setInactive, __setInfo) {
 			__setInactive();
 			__setInfo(false, false, "");
 			__logInfo("Starting Media ...");
-			__ws = new WebSocket(`${tools.is_https ? "wss" : "ws"}://${location.host}/api/media/ws`);
+			__ws = new WebSocket(tools.makeWsUrl("api/media/ws"));
 			__ws.binaryType = "arraybuffer";
 			__ws.onopen = __wsOpenHandler;
 			__ws.onerror = __wsErrorHandler;
 			__ws.onclose = __wsCloseHandler;
 			__ws.onmessage = async (event) => {
 				if (typeof event.data === "string") {
-					__wsJsonHandler(JSON.parse(event.data));
+					event = JSON.parse(event.data);
+					__wsJsonHandler(event.event_type, event.event);
 				} else { // Binary
 					await __wsBinHandler(event.data);
 				}
@@ -110,8 +112,8 @@ export function MediaStreamer(__setActive, __setInactive, __setInfo) {
 
 			if (__decoder && __decoder.state === "configured") {
 				let online = !!(__state && __state.source.online);
-				let info = `${__frames} fps dynamic`;
-				__frames = 0;
+				let info = `${__fps_accum} fps dynamic`;
+				__fps_accum = 0;
 				__setInfo(true, online, info);
 			}
 		} catch (ex) {
@@ -145,16 +147,16 @@ export function MediaStreamer(__setActive, __setInactive, __setInfo) {
 			__decoder = null;
 		}
 		__missed_heartbeats = 0;
-		__frames = 0;
+		__fps_accum = 0;
 		__ws = null;
 		if (!__stop) {
 			setTimeout(() => __ensureMedia(true), 1000);
 		}
 	};
 
-	var __wsJsonHandler = function(event) {
-		if (event.event_type === "media") {
-			__decoderCreate(event.event.video);
+	var __wsJsonHandler = function(event_type, event) {
+		if (event_type === "media") {
+			__decoderCreate(event.video);
 		}
 	};
 
@@ -203,18 +205,7 @@ export function MediaStreamer(__setActive, __setInactive, __setInfo) {
 		}
 
 		__decoder = new VideoDecoder({ // eslint-disable-line no-undef
-			"output": (frame) => {
-				try {
-					if (__canvas.width !== frame.displayWidth || __canvas.height !== frame.displayHeight) {
-						__canvas.width = frame.displayWidth;
-						__canvas.height = frame.displayHeight;
-					}
-					__ctx.drawImage(frame, 0, 0);
-					__frames += 1;
-				} finally {
-					frame.close();
-				}
-			},
+			"output": __drawFrame,
 			"error": (err) => __logInfo(err.message),
 		});
 		__codec = `avc1.${formats.h264.profile_level_id}`;
@@ -223,6 +214,44 @@ export function MediaStreamer(__setActive, __setInactive, __setInfo) {
 			"event_type": "start",
 			"event": {"type": "video", "format": "h264"},
 		}));
+	};
+
+	var __drawFrame = function(frame) {
+		try {
+			let width = frame.displayWidth;
+			let height = frame.displayHeight;
+			switch (__orient) {
+				case 90:
+				case 270:
+					width = frame.displayHeight;
+					height = frame.displayWidth;
+			}
+
+			if (__canvas.width !== width || __canvas.height !== height) {
+				__canvas.width = width;
+				__canvas.height = height;
+			}
+
+			if (__orient === 0) {
+				__ctx.drawImage(frame, 0, 0);
+			} else {
+				__ctx.save();
+				try {
+					switch(__orient) {
+						case 90: __ctx.translate(0, height); __ctx.rotate(-Math.PI / 2); break;
+						case 180: __ctx.translate(width, height); __ctx.rotate(-Math.PI); break;
+						case 270: __ctx.translate(width, 0); __ctx.rotate(Math.PI / 2); break;
+					}
+					__ctx.drawImage(frame, 0, 0);
+				} finally {
+					__ctx.restore();
+				}
+			}
+
+			__fps_accum += 1;
+		} finally {
+			frame.close();
+		}
 	};
 
 	var __decoderDestroy = function() {

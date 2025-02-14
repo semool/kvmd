@@ -26,20 +26,23 @@
   <head>
     <meta charset="utf-8">
     <title>PiKVM Login</title>
-    <link rel="apple-touch-icon" sizes="180x180" href="/share/apple-touch-icon.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="/share/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="/share/favicon-16x16.png">
-    <link rel="manifest" href="/share/site.webmanifest">
-    <link rel="mask-icon" href="/share/safari-pinned-tab.svg" color="#5bbad5">
+    <link rel="apple-touch-icon" sizes="180x180" href="../share/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="../share/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="../share/favicon-16x16.png">
+    <link rel="manifest" href="../share/site.webmanifest">
+    <link rel="mask-icon" href="../share/safari-pinned-tab.svg" color="#5bbad5">
     <meta name="msapplication-TileColor" content="#2b5797">
     <meta name="theme-color" content="#ffffff">
-    <link rel="stylesheet" href="/share/css/vars.css">
-    <link rel="stylesheet" href="/share/css/main.css">
-    <link rel="stylesheet" href="/share/css/window.css">
-    <link rel="stylesheet" href="/share/css/modal.css">
-    <link rel="stylesheet" href="/share/css/login/login.css">
-    <link rel="stylesheet" href="/share/css/user.css">
-    <script type="module">import {main} from "/share/js/login/main.js";
+    <link rel="stylesheet" href="../share/css/vars.css">
+    <link rel="stylesheet" href="../share/css/main.css">
+    <link rel="stylesheet" href="../share/css/window.css">
+    <link rel="stylesheet" href="../share/css/modal.css">
+    <link rel="stylesheet" href="../share/css/radio.css">
+    <link rel="stylesheet" href="../share/css/login/login.css">
+    <link rel="stylesheet" href="../share/css/user.css">
+    <script type="module">import {setRootPrefix} from "../share/js/vars.js";
+      setRootPrefix("../");
+      import {main} from "../share/js/login/main.js";
       main();
     </script>
   </head>
@@ -48,6 +51,15 @@
       <div id="login-box">
         <div id="login">
           <table>
+            <tr>
+              <td><img class="svg-gray" id="login-logo" src="../share/svg/logo.svg" alt="&amp;pi;-kvm"></td>
+              <td></td>
+            </tr>
+            <tr>
+              <td colspan="2">
+                <hr>
+              </td>
+            </tr>
             <tr>
               <td>Username:&nbsp;</td>
               <td>
@@ -72,9 +84,27 @@
               </td>
             </tr>
             <tr>
+              <td><a target="_blank" href="https://docs.pikvm.org/auth/#session-expiration">Remember me</a>:&nbsp;</td>
+              <td>
+                <div class="radio-box">
+                  <input type="radio" id="expire-radio-3600" name="expire-radio" value="3600"/>
+                  <label for="expire-radio-3600">1h</label>
+                  <input type="radio" id="expire-radio-43200" name="expire-radio" value="43200"/>
+                  <label for="expire-radio-43200">12h</label>
+                  <input type="radio" id="expire-radio-0" name="expire-radio" value="0" checked="checked"/>
+                  <label for="expire-radio-0">Forever</label>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td colspan="2">
+                <hr>
+              </td>
+            </tr>
+            <tr>
               <td></td>
               <td>
-                <button class="key" id="login-button" style="width:100%">Login</button>
+                <button class="key" id="login-button">Login</button>
               </td>
             </tr>
           </table>

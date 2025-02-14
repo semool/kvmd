@@ -183,13 +183,13 @@ export function Hid(__getGeometry, __recorder) {
 			let avail_json = JSON.stringify(avail);
 			if (el.__avail_json !== avail_json) {
 				let html = "";
-				for (let pair of [
+				for (let kv of [
 					["USB",  "usb"],
 					["PS/2", "ps2"],
 					["Off",  "disabled"],
 				]) {
-					if (avail.includes(pair[1])) {
-						html += tools.radio.makeItem("hid-outputs-keyboard-radio", pair[0], pair[1]);
+					if (avail.includes(kv[1])) {
+						html += tools.radio.makeItem("hid-outputs-keyboard-radio", kv[0], kv[1]);
 					}
 				}
 				el.innerHTML = html;
@@ -211,16 +211,16 @@ export function Hid(__getGeometry, __recorder) {
 			if (el.__avail_json !== avail_json) {
 				has_relative = false;
 				let html = "";
-				for (let pair of [
+				for (let kv of [
 					["Absolute",  "usb",       false],
 					["Abs-Win98", "usb_win98", false],
 					["Relative",  "usb_rel",   true],
 					["PS/2",      "ps2",       true],
 					["Off",       "disabled",  false],
 				]) {
-					if (avail.includes(pair[1])) {
-						html += tools.radio.makeItem("hid-outputs-mouse-radio", pair[0], pair[1]);
-						has_relative = (has_relative || pair[2]);
+					if (avail.includes(kv[1])) {
+						html += tools.radio.makeItem("hid-outputs-mouse-radio", kv[0], kv[1]);
+						has_relative = (has_relative || kv[2]);
 					}
 				}
 				el.innerHTML = html;
@@ -275,7 +275,7 @@ export function Hid(__getGeometry, __recorder) {
 
 	var __clickOutputsRadio = function(hid) {
 		let output = tools.radio.getValue(`hid-outputs-${hid}-radio`);
-		tools.httpPost("/api/hid/set_params", {[`${hid}_output`]: output}, function(http) {
+		tools.httpPost("api/hid/set_params", {[`${hid}_output`]: output}, function(http) {
 			if (http.status !== 200) {
 				wm.error("Can't configure HID", http.responseText);
 			}
@@ -284,7 +284,7 @@ export function Hid(__getGeometry, __recorder) {
 
 	var __clickJigglerSwitch = function() {
 		let enabled = $("hid-jiggler-switch").checked;
-		tools.httpPost("/api/hid/set_params", {"jiggler": enabled}, function(http) {
+		tools.httpPost("api/hid/set_params", {"jiggler": enabled}, function(http) {
 			if (http.status !== 200) {
 				wm.error(`Can't ${enabled ? "enabled" : "disable"} mouse jiggler`, http.responseText);
 			}
@@ -293,7 +293,7 @@ export function Hid(__getGeometry, __recorder) {
 
 	var __clickConnectSwitch = function() {
 		let connected = $("hid-connect-switch").checked;
-		tools.httpPost("/api/hid/set_connected", {"connected": connected}, function(http) {
+		tools.httpPost("api/hid/set_connected", {"connected": connected}, function(http) {
 			if (http.status !== 200) {
 				wm.error(`Can't ${connected ? "connect" : "disconnect"} HID`, http.responseText);
 			}
@@ -303,7 +303,7 @@ export function Hid(__getGeometry, __recorder) {
 	var __clickResetButton = function() {
 		wm.confirm("Are you sure you want to reset HID (keyboard & mouse)?").then(function(ok) {
 			if (ok) {
-				tools.httpPost("/api/hid/reset", null, function(http) {
+				tools.httpPost("api/hid/reset", null, function(http) {
 					if (http.status !== 200) {
 						wm.error("HID reset error", http.responseText);
 					}
