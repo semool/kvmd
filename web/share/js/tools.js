@@ -136,14 +136,9 @@ export var tools = new function() {
 		return `${hours}:${mins}:${secs}.${millis}`;
 	};
 
-	self.remap = function(x, a1, b1, a2, b2) {
-		let remapped = Math.round((x - a1) / b1 * (b2 - a2) + a2);
-		if (remapped < a2) {
-			return a2;
-		} else if (remapped > b2) {
-			return b2;
-		}
-		return remapped;
+	self.remap = function(value, in_min, in_max, out_min, out_max) {
+		let result = Math.round((value - in_min) * (out_max - out_min) / ((in_max - in_min) || 1) + out_min);
+		return Math.min(Math.max(result, out_min), out_max);
 	};
 
 	self.getRandomInt = function(min, max) {
@@ -157,25 +152,25 @@ export var tools = new function() {
 	self.el = new function() {
 		return {
 			"setOnClick": function(el, callback, prevent_default=true) {
-				el.onclick = el.ontouchend = function(event) {
+				el.onclick = el.ontouchend = function(ev) {
 					if (prevent_default) {
-						event.preventDefault();
+						ev.preventDefault();
 					}
 					callback();
 				};
 			},
 			"setOnDown": function(el, callback, prevent_default=true) {
-				el.onmousedown = el.ontouchstart = function(event) {
+				el.onmousedown = el.ontouchstart = function(ev) {
 					if (prevent_default) {
-						event.preventDefault();
+						ev.preventDefault();
 					}
-					callback();
+					callback(ev);
 				};
 			},
 			"setOnUp": function(el, callback, prevent_default=true) {
-				el.onmouseup = el.ontouchend = function(event) {
+				el.onmouseup = el.ontouchend = function(ev) {
 					if (prevent_default) {
-						event.preventDefault();
+						ev.preventDefault();
 					}
 					callback();
 				};
@@ -215,9 +210,9 @@ export var tools = new function() {
 					el.__pressed = true;
 				};
 
-				el.onmouseup = el.ontouchend = function(event) {
+				el.onmouseup = el.ontouchend = function(ev) {
 					let value = self.slider.getValue(el);
-					event.preventDefault();
+					ev.preventDefault();
 					clear_timer();
 					el.__execution_timer = setTimeout(function() {
 						el.__pressed = false;

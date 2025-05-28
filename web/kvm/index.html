@@ -46,7 +46,6 @@
     <link rel="stylesheet" href="../share/css/keypad.css">
     <link rel="stylesheet" href="../share/css/tabs.css">
     <link rel="stylesheet" href="../share/css/kvm/stream.css">
-    <link rel="stylesheet" href="../share/css/kvm/hid.css">
     <link rel="stylesheet" href="../share/css/kvm/msd.css">
     <link rel="stylesheet" href="../share/css/kvm/system.css">
     <link rel="stylesheet" href="../share/css/kvm/keyboard.css">
@@ -763,7 +762,7 @@
                 </tr>
               </table>
           <hr>
-          <input id="hid-recorder-new-script-file" type="file">
+          <input id="hid-recorder-new-script-file" type="file" style="display: none">
           <div class="buttons buttons-row">
             <button class="row50" id="hid-recorder-upload" disabled>Upload script</button>
             <button class="row50" id="hid-recorder-download" disabled>Download script</button>
@@ -771,7 +770,7 @@
         </div>
       </li>
       <li class="right" id="text-dropdown"><a class="menu-button" href="#"><img class="feature-disabled" id="stream-ocr-led" src="../share/svg/led-gear.svg"><span>Text</span></a>
-        <div class="menu" id="text-menu">
+        <div class="menu" id="text-menu" style="width: 360px">
           <div class="text"><b>Paste text as keypress sequence<br></b><sub>Please note that PiKVM cannot switch the keyboard layout</sub></div>
           <hr>
           <div class="text" style="margin-right: 20px">
@@ -780,9 +779,9 @@
           <table class="kv">
             <tr>
               <td>
-                <button id="hid-pak-button" disabled data-force-hide-menu>&bull; Paste</button>
+                <button id="hid-pak-button" disabled data-force-hide-menu title="Ctrl+Enter when the text is focused">&bull; Paste</button>
               </td>
-              <td>using host keymap</td>
+              <td>using a host keymap</td>
               <td>
                 <select id="hid-pak-keymap-selector"></select>
               </td>
@@ -839,10 +838,10 @@
             </table>
             <table class="kv">
               <tr>
-                <td colspan="4">&bull; Press <b>Enter</b> to recognize and copy text to clipboard</td>
+                <td colspan="4">&bull; Next hit the <b>Enter</b> to recognize and copy text to clipboard...</td>
               </tr>
               <tr>
-                <td colspan="4">&bull; Press <b>Esc</b> to cancel selection</td>
+                <td colspan="4">&bull; Or hit the <b>Escape</b> to cancel a selection</td>
               </tr>
               <tr>
                 <td></td>
@@ -983,14 +982,16 @@
     <div class="window" id="stream-ocr-window">
       <div class="hidden" id="stream-ocr-selection"></div>
     </div>
-    <div class="window window-resizable" id="stream-window">
+    <div class="window window-resizable" id="stream-window" data-show-maximized data-organize-hook>
       <div class="window-header" id="stream-window-header">
         <div class="window-grab">MJPEG</div>
-        <button class="window-button-close"><b>&times;</b></button>
-        <button class="window-button-maximize">&#9744;</button>
-        <button class="window-button-original">&bull;</button>
-        <button class="window-button-enter-full-tab">&#9650;</button>
-        <button class="window-button-full-screen">&#10530;</button>
+        <div class="window-buttons">
+          <button class="window-button-full-screen">&#10530;</button>
+          <button class="window-button-enter-full-tab">&#9650;</button>
+          <button class="window-button-original">&bull;</button>
+          <button class="window-button-maximize">&#9744;</button>
+          <button class="window-button-close"><b>&times;</b></button>
+        </div>
       </div>
       <div id="stream-info"></div>
       <button class="window-button-exit-full-tab">&#9660;</button>
@@ -1002,41 +1003,33 @@
       <div class="keypad" id="stream-mouse-buttons" align="center">
         <div class="keypad-block">
           <div class="keypad-row">
-            <div class="key wide-3 left rounded-left" data-code="left">
-              <div class="label">Left</div>
+            <div class="key wide-3 left rounded-left" data-code="left" data-allow-autohold>
+              <div class="label"><b>&bull;</b><br>Left</div>
             </div>
-            <div class="modifier left small rounded-right" data-code="left">
-              <div class="label"><b>&bull;</b><br>Hold</div>
+            <div class="key wide-1 rounded-none" data-code="middle" data-allow-autohold>
+              <div class="label"><b>&bull;</b><br>Mid</div>
             </div>
-            <div class="empty" style="width: 15px"></div>
-            <div class="key wide-1 left rounded-left" data-code="middle">
-              <div class="label">Mid</div>
-            </div>
-            <div class="modifier left small rounded-right" data-code="middle">
-              <div class="label"><b>&bull;</b><br>Hold</div>
-            </div>
-            <div class="empty" style="width: 15px"></div>
-            <div class="modifier right small rounded-left" data-code="right">
-              <div class="label"><b>&bull;</b><br>Hold</div>
-            </div>
-            <div class="key wide-3 right rounded-right" data-code="right">
-              <div class="label">Right</div>
+            <div class="key wide-3 right rounded-right" data-code="right" data-allow-autohold>
+              <div class="label"><b>&bull;</b><br>Right</div>
             </div>
             <div class="empty" style="width: 30px"></div>
-            <div class="key small rounded-left" data-code="up">
-              <div class="label">Up</div>
+            <div class="key small rounded-left" data-code="up" data-allow-autohold>
+              <div class="label"><b>&bull;</b><br>Up</div>
             </div>
-            <div class="key small rounded-right" data-code="down">
-              <div class="label">Down</div>
+            <div class="key small rounded-right" data-code="down" data-allow-autohold>
+              <div class="label"><b>&bull;</b><br>Down</div>
             </div>
           </div>
         </div>
       </div>
     </div>
-    <div class="window" id="keyboard-window">
+    <div class="window" id="keyboard-window" data-show-centered>
       <div class="window-header" id="keyboard-window-header">
         <div class="window-grab">Virtual Keyboard</div>
-        <button class="window-button-close"><b>&times;</b></button>
+        <div class="window-buttons">
+          <button class="window-button-original">&bull;</button>
+          <button class="window-button-close"><b>&times;</b></button>
+        </div>
       </div>
       <div class="keypad" id="keyboard-desktop" align="center">
         <div class="keypad-block">
@@ -1328,7 +1321,7 @@
                 </div>
           </div>
           <div class="keypad-row">
-                <div class="modifier wide-3 left small" data-code="ShiftLeft">
+                <div class="key wide-3 left small" data-code="ShiftLeft" data-allow-autohold>
                   <div class="label"><b>&bull;</b><br>Shift
                   </div>
                 </div>
@@ -1383,23 +1376,23 @@
                   </div>
                 </div>
                     <div class="spacer"></div>
-                <div class="modifier wide-3 right small" data-code="ShiftRight">
+                <div class="key wide-3 right small" data-code="ShiftRight" data-allow-autohold>
                   <div class="label"><b>&bull;</b><br>Shift
                   </div>
                 </div>
           </div>
           <div class="keypad-row">
-                <div class="modifier wide-1 left small" data-code="ControlLeft">
+                <div class="key wide-1 left small" data-code="ControlLeft" data-allow-autohold>
                   <div class="label"><b>&bull;</b><br>Ctrl
                   </div>
                 </div>
                     <div class="spacer-fixed"></div>
-                <div class="modifier wide-1 left small" data-code="MetaLeft">
+                <div class="key wide-1 left small" data-code="MetaLeft" data-allow-autohold>
                   <div class="label"><b>&bull;</b><br>Win
                   </div>
                 </div>
                     <div class="spacer-fixed"></div>
-                <div class="modifier wide-1 left small" data-code="AltLeft">
+                <div class="key wide-1 left small" data-code="AltLeft" data-allow-autohold>
                   <div class="label"><b>&bull;</b><br>Alt
                   </div>
                 </div>
@@ -1409,12 +1402,12 @@
                   </div>
                 </div>
                     <div class="spacer-fixed"></div>
-                <div class="modifier wide-1 right small" data-code="AltRight">
+                <div class="key wide-1 right small" data-code="AltRight" data-allow-autohold>
                   <div class="label"><b>&bull;</b><br>Alt
                   </div>
                 </div>
                     <div class="spacer-fixed"></div>
-                <div class="modifier wide-1 right small" data-code="MetaRight">
+                <div class="key wide-1 right small" data-code="MetaRight" data-allow-autohold>
                   <div class="label"><b>&bull;</b><br>Win
                   </div>
                 </div>
@@ -1424,7 +1417,7 @@
                   </div>
                 </div>
                     <div class="spacer-fixed"></div>
-                <div class="modifier wide-1 right small" data-code="ControlRight">
+                <div class="key wide-1 right small" data-code="ControlRight" data-allow-autohold>
                   <div class="label"><b>&bull;</b><br>Ctrl
                   </div>
                 </div>
@@ -1432,7 +1425,7 @@
         </div>
         <div class="keypad-block">
           <div class="keypad-row">
-                <div class="modifier small" data-code="PrintScreen">
+                <div class="key small" data-code="PrintScreen" data-allow-autohold>
                   <div class="label"><b>&bull;</b><br>Pt/Sq
                   </div>
                 </div>
@@ -1656,19 +1649,19 @@
                 </div>
           </div>
           <div class="keypad-row">
-                <div class="modifier small" data-code="KanaMode">
+                <div class="key small" data-code="KanaMode" data-allow-autohold>
                   <div class="label"><b>&bull;</b><br>Kana
                   </div>
                 </div>
           </div>
           <div class="keypad-row">
-                <div class="modifier small" data-code="NonConvert">
+                <div class="key small" data-code="NonConvert" data-allow-autohold>
                   <div class="label"><b>&bull;</b><br>N/Cnv
                   </div>
                 </div>
           </div>
           <div class="keypad-row">
-                <div class="modifier small" data-code="Convert">
+                <div class="key small" data-code="Convert" data-allow-autohold>
                   <div class="label"><b>&bull;</b><br>Cnv
                   </div>
                 </div>
@@ -1734,7 +1727,7 @@
                   </div>
                 </div>
                     <div class="spacer-fixed"></div>
-                <div class="modifier small" data-code="PrintScreen">
+                <div class="key small" data-code="PrintScreen" data-allow-autohold>
                   <div class="label"><b>&bull;</b><br>Pt/Sq
                   </div>
                 </div>
@@ -1978,7 +1971,7 @@
                 </div>
           </div>
           <div class="keypad-row">
-                <div class="modifier wide-3 left small" data-code="ShiftLeft">
+                <div class="key wide-3 left small" data-code="ShiftLeft" data-allow-autohold>
                   <div class="label"><b>&bull;</b><br>Shift
                   </div>
                 </div>
@@ -2049,17 +2042,17 @@
                 </div>
           </div>
           <div class="keypad-row">
-                <div class="modifier wide-1 left small" data-code="ControlLeft">
+                <div class="key wide-1 left small" data-code="ControlLeft" data-allow-autohold>
                   <div class="label"><b>&bull;</b><br>Ctrl
                   </div>
                 </div>
                     <div class="spacer"></div>
-                <div class="modifier wide-1 left small" data-code="MetaLeft">
+                <div class="key wide-1 left small" data-code="MetaLeft" data-allow-autohold>
                   <div class="label"><b>&bull;</b><br>Win
                   </div>
                 </div>
                     <div class="spacer"></div>
-                <div class="modifier wide-1 left small" data-code="AltLeft">
+                <div class="key wide-1 left small" data-code="AltLeft" data-allow-autohold>
                   <div class="label"><b>&bull;</b><br>Alt
                   </div>
                 </div>
@@ -2069,12 +2062,12 @@
                   </div>
                 </div>
                     <div class="spacer"></div>
-                <div class="modifier right small" data-code="AltRight">
+                <div class="key right small" data-code="AltRight" data-allow-autohold>
                   <div class="label"><b>&bull;</b><br>Alt
                   </div>
                 </div>
                     <div class="spacer"></div>
-                <div class="modifier right small" data-code="MetaRight">
+                <div class="key right small" data-code="MetaRight" data-allow-autohold>
                   <div class="label"><b>&bull;</b><br>Win
                   </div>
                 </div>
@@ -2084,12 +2077,12 @@
                   </div>
                 </div>
                     <div class="spacer"></div>
-                <div class="modifier right small" data-code="ShiftRight">
+                <div class="key right small" data-code="ShiftRight" data-allow-autohold>
                   <div class="label"><b>&bull;</b><br>Shift
                   </div>
                 </div>
                     <div class="spacer"></div>
-                <div class="modifier right small" data-code="ControlRight">
+                <div class="key right small" data-code="ControlRight" data-allow-autohold>
                   <div class="label"><b>&bull;</b><br>Ctrl
                   </div>
                 </div>
@@ -2112,10 +2105,13 @@
         </div>
       </div>
     </div>
-    <div class="window" id="switch-window" style="width: min-content">
+    <div class="window" id="switch-window" data-show-centered style="width: min-content">
       <div class="window-header">
         <div class="window-grab">Switch settings</div>
-        <button class="window-button-close"><b>&times;</b></button>
+        <div class="window-buttons">
+          <button class="window-button-original">&bull;</button>
+          <button class="window-button-close"><b>&times;</b></button>
+        </div>
       </div>
       <div class="tabs-box">
             <input checked type="radio" name="switch-tab-button" id="switch-tab-edid-button">
@@ -2259,10 +2255,13 @@
             </div>
       </div>
     </div>
-    <div class="window" id="about-window">
+    <div class="window" id="about-window" data-show-centered>
       <div class="window-header">
         <div class="window-grab">About</div>
-        <button class="window-button-close"><b>&times;</b></button>
+        <div class="window-buttons">
+          <button class="window-button-original">&bull;</button>
+          <button class="window-button-close"><b>&times;</b></button>
+        </div>
       </div>
       <div id="about">
         <table>
@@ -2962,15 +2961,18 @@
         <p class="text credits"><a target="_blank" href="https://pikvm.org">PiKVM Project</a>&nbsp; | &nbsp;<a target="_blank" href="https://docs.pikvm.org">Documentation</a>&nbsp; | &nbsp;<a target="_blank" href="https://pikvm.org/support">Support</a></p>
       </div>
     </div>
-    <div class="window window-resizable" id="webterm-window" style="width: 640px; height: 480px">
+    <div class="window window-resizable" id="webterm-window" data-show-centered style="display: flex; min-width: 720px; min-height: 480px">
       <div class="window-header">
         <div class="window-grab">Terminal</div>
-        <button class="window-button-close"><b>&times;</b></button>
-        <button class="window-button-maximize">&#9744;</button>
-        <!-- Терминал глючит из-за зажимаемой клавиши ESC для выхода-->
-        <!-- button(class="window-button-full-screen") &#10530;-->
+        <div class="window-buttons">
+          <button class="window-button-original">&bull;</button>
+          <button class="window-button-maximize">&#9744;</button>
+          <button class="window-button-close"><b>&times;</b></button>
+          <!-- Терминал глючит из-за зажимаемой клавиши ESC для выхода-->
+          <!-- button(class="window-button-full-screen") &#10530;-->
+        </div>
       </div>
-      <iframe id="webterm-iframe" src="" style="width: 100%; height: 100%"></iframe>
+      <iframe id="webterm-iframe" src="" style="width: 100%; flex: 1"></iframe>
     </div>
     <ul class="navbar-bg-tips">
       <li class="left">
@@ -2981,7 +2983,7 @@
       </li>
     </ul>
     <ul class="footer">
-      <li class="left"><span id="kvmd-meta-server-host" title="Server name (see System/About)"></span>&nbsp; | &nbsp;<span id="kvmd-version-kvmd" title="KVMD version"></span>&nbsp; | &nbsp;<span id="kvmd-version-streamer" title="Streamer version"></span></li>
+      <li class="left"><span id="kvmd-meta-server-host" title="KVM/Server name (see System/About)"></span>&nbsp; | &nbsp;<span id="kvmd-version-kvmd" title="KVMD version"></span>&nbsp; | &nbsp;<span id="kvmd-version-streamer" title="Streamer version"></span></li>
       <li class="right"><a target="_blank" href="https://pikvm.org">PiKVM Project</a>&nbsp; | &nbsp;<a target="_blank" href="https://docs.pikvm.org">Documentation</a>&nbsp; | &nbsp;<a target="_blank" href="https://pikvm.org/support">Support</a></li>
     </ul>
   </body>

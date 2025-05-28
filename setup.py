@@ -56,7 +56,7 @@ def main() -> None:
 
     setup(
         name="kvmd",
-        version="4.67",
+        version="4.76",
         url="https://github.com/pikvm/kvmd",
         license="GPLv3",
         author="Maxim Devaev",
@@ -101,6 +101,7 @@ def main() -> None:
             "kvmd.apps.ipmi",
             "kvmd.apps.vnc",
             "kvmd.apps.vnc.rfb",
+            "kvmd.apps.localhid",
             "kvmd.apps.ngxmkconf",
             "kvmd.apps.janus",
             "kvmd.apps.watchdog",
@@ -130,6 +131,7 @@ def main() -> None:
                 "kvmd-edidconf = kvmd.apps.edidconf:main",
                 "kvmd-ipmi = kvmd.apps.ipmi:main",
                 "kvmd-vnc = kvmd.apps.vnc:main",
+                "kvmd-localhid = kvmd.apps.localhid:main",
                 "kvmd-nginx-mkconf = kvmd.apps.ngxmkconf:main",
                 "kvmd-janus = kvmd.apps.janus:main",
                 "kvmd-watchdog = kvmd.apps.watchdog:main",

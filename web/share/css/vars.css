@@ -45,6 +45,7 @@
 	--cs-window-header-grabbed-bg: #436a8a;
 	--cs-window-header-grabbed-fg: white;
 	--cs-window-closer-default-fg: #6c7481;
+	--cs-window-button-special-fg: #009b48;
 
 	--cs-code-default-bg: #17191d;
 	--cs-code-default-fg: #aaaaaa;
@@ -65,6 +66,9 @@
 	--cs-key-pressed-bg: #17191d;
 	--cs-key-pressed-fg: #6c7481;
 	--cs-key-holded-bg: #436a8a;
+	--cs-key-holded-fg: white;
+	--cs-key-locked-bg: #a80000;
+	--cs-key-locked-fg: white;
 
 	--cs-marker-fg: #5b90bb;
 	--cs-corner-bg: #5b90bb;
@@ -78,7 +82,7 @@
 	--border-default-thin: thin solid #36393f;
 	--border-default-2px: 2px solid #36393f;
 	--border-hovered-2px: 2px solid #2a2d31;
-	--border-navbar-item-thin: thin solid black;
+	--border-navbar-item-thin: thin solid #101010;
 	--border-control-thin: thin solid #17191d;
 	--border-key-thin: thin solid #202225;
 	--border-intensive-2px: 2px solid #5b90bb;

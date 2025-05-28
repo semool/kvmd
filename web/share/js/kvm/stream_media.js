@@ -26,7 +26,7 @@
 import {tools, $} from "../tools.js";
 
 
-export function MediaStreamer(__setActive, __setInactive, __setInfo, __orient) {
+export function MediaStreamer(__setActive, __setInactive, __setInfo, __organizeHook, __orient) {
 	var self = this;
 
 	/************************************************************************/
@@ -38,8 +38,9 @@ export function MediaStreamer(__setActive, __setInactive, __setInfo, __orient) {
 	var __ping_timer = null;
 	var __missed_heartbeats = 0;
 
-	var __decoder = null;
 	var __codec = "";
+	var __decoder = null;
+	var __frame = null;
 	var __canvas = $("stream-canvas");
 	var __ctx = __canvas.getContext("2d");
 
@@ -86,13 +87,13 @@ export function MediaStreamer(__setActive, __setInactive, __setInfo, __orient) {
 			__ws.onopen = __wsOpenHandler;
 			__ws.onerror = __wsErrorHandler;
 			__ws.onclose = __wsCloseHandler;
-			__ws.onmessage = async (event) => {
+			__ws.onmessage = async (ev) => {
 				try {
-					if (typeof event.data === "string") {
-						event = JSON.parse(event.data);
-						__wsJsonHandler(event.event_type, event.event);
+					if (typeof ev.data === "string") {
+						ev = JSON.parse(ev.data);
+						__wsJsonHandler(ev.event_type, ev.event);
 					} else { // Binary
-						await __wsBinHandler(event.data);
+						await __wsBinHandler(ev.data);
 					}
 				} catch (ex) {
 					__wsErrorHandler(ex);
@@ -101,8 +102,8 @@ export function MediaStreamer(__setActive, __setInactive, __setInfo, __orient) {
 		}
 	};
 
-	var __wsOpenHandler = function(event) {
-		__logInfo("Socket opened:", event);
+	var __wsOpenHandler = function(ev) {
+		__logInfo("Socket opened:", ev);
 		__missed_heartbeats = 0;
 		__ping_timer = setInterval(__ping, 1000);
 	};
@@ -135,14 +136,14 @@ export function MediaStreamer(__setActive, __setInactive, __setInfo, __orient) {
 		__setInactive();
 	};
 
-	var __wsErrorHandler = function(event) {
-		__logInfo("Socket error:", event);
-		__setInfo(false, false, event);
+	var __wsErrorHandler = function(ev) {
+		__logInfo("Socket error:", ev);
+		__setInfo(false, false, ev);
 		__wsForceClose();
 	};
 
-	var __wsCloseHandler = function(event) {
-		__logInfo("Socket closed:", event);
+	var __wsCloseHandler = function(ev) {
+		__logInfo("Socket closed:", ev);
 		if (__ping_timer) {
 			clearInterval(__ping_timer);
 			__ping_timer = null;
@@ -156,9 +157,9 @@ export function MediaStreamer(__setActive, __setInactive, __setInfo, __orient) {
 		}
 	};
 
-	var __wsJsonHandler = function(event_type, event) {
-		if (event_type === "media") {
-			__setupCodec(event.video);
+	var __wsJsonHandler = function(ev_type, ev) {
+		if (ev_type === "media") {
+			__setupCodec(ev.video);
 		}
 	};
 
@@ -208,7 +209,7 @@ export function MediaStreamer(__setActive, __setInactive, __setInfo, __orient) {
 			__closeDecoder();
 			__codec = codec;
 			__decoder = new VideoDecoder({ // eslint-disable-line no-undef
-				"output": __drawFrame,
+				"output": __renderFrame,
 				"error": (err) => __logInfo(err.message),
 			});
 			if (started) {
@@ -241,32 +242,51 @@ export function MediaStreamer(__setActive, __setInactive, __setInfo, __orient) {
 		if (__decoder !== null) {
 			try {
 				__decoder.close();
-			} catch { // eslint-disable-line no-empty
 			} finally {
-				__decoder = null;
 				__codec = "";
+				__decoder = null;
+				if (__frame !== null) {
+					try {
+						__closeFrame(__frame);
+					} finally {
+						__frame = null;
+					}
+				}
 			}
 		}
 	};
 
-	var __drawFrame = function(frame) {
+	var __renderFrame = function(frame) {
+		if (__frame === null) {
+			__frame = frame;
+			window.requestAnimationFrame(__drawPendingFrame, __canvas);
+		} else {
+			__closeFrame(frame);
+		}
+	};
+
+	var __drawPendingFrame = function() {
+		if (__frame === null) {
+			return;
+		}
 		try {
-			let width = frame.displayWidth;
-			let height = frame.displayHeight;
+			let width = __frame.displayWidth;
+			let height = __frame.displayHeight;
 			switch (__orient) {
 				case 90:
 				case 270:
-					width = frame.displayHeight;
-					height = frame.displayWidth;
+					width = __frame.displayHeight;
+					height = __frame.displayWidth;
 			}
 
 			if (__canvas.width !== width || __canvas.height !== height) {
 				__canvas.width = width;
 				__canvas.height = height;
+				__organizeHook();
 			}
 
 			if (__orient === 0) {
-				__ctx.drawImage(frame, 0, 0);
+				__ctx.drawImage(__frame, 0, 0);
 			} else {
 				__ctx.save();
 				try {
@@ -275,14 +295,28 @@ export function MediaStreamer(__setActive, __setInactive, __setInfo, __orient) {
 						case 180: __ctx.translate(width, height); __ctx.rotate(-Math.PI); break;
 						case 270: __ctx.translate(width, 0); __ctx.rotate(Math.PI / 2); break;
 					}
-					__ctx.drawImage(frame, 0, 0);
+					__ctx.drawImage(__frame, 0, 0);
 				} finally {
 					__ctx.restore();
 				}
 			}
-
 			__fps_accum += 1;
 		} finally {
+			__closeFrame(__frame);
+			__frame = null;
+		}
+	};
+
+	var __closeFrame = function(frame) {
+		if (!tools.browser.is_firefox) {
+			// FIXME: On Firefox, image is flickering when we're closing the frame for some reason.
+			// So we're just not performing the close() and it seems there is no problems here
+			// because Firefox is implementing some auto-closing logic. With auto-close,
+			// no flickering observed.
+			//  - https://github.com/mozilla/gecko-dev/blob/82333a9/dom/media/webcodecs/VideoFrame.cpp
+			// Note at 2025.05.13:
+			//  - The problem is not observed on nightly Firefox 140.
+			//  - It's also not observed with hardware accelleration on 138.
 			frame.close();
 		}
 	};

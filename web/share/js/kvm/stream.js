@@ -43,9 +43,9 @@ export function Streamer() {
 	var __res = {"width": 640, "height": 480};
 
 	var __init__ = function() {
-		__streamer = new MjpegStreamer(__setActive, __setInactive, __setInfo);
+		__streamer = new MjpegStreamer(__setActive, __setInactive, __setInfo, __organizeHook);
 
-		$("stream-led").title = "Stream inactive";
+		$("stream-led").title = "No stream from PiKVM";
 
 		tools.slider.setParams($("stream-quality-slider"), 5, 100, 5, 80, function(value) {
 			$("stream-quality-value").innerText = `${value}%`;
@@ -110,6 +110,7 @@ export function Streamer() {
 
 		$("stream-window").show_hook = () => __applyState(__state);
 		$("stream-window").close_hook = () => __applyState(null);
+		$("stream-window").organize_hook = __organizeHook;
 	};
 
 	/************************************************************************/
@@ -260,7 +261,7 @@ export function Streamer() {
 
 	var __setInactive = function() {
 		$("stream-led").className = "led-gray";
-		$("stream-led").title = "Stream inactive";
+		$("stream-led").title = "No stream from PiKVM";
 	};
 
 	var __setControlsEnabled = function(enabled) {
@@ -278,7 +279,7 @@ export function Streamer() {
 		let title = `${__streamer.getName()} - `;
 		if (is_active) {
 			if (!online) {
-				title += "No signal / ";
+				title += "No video from host / ";
 			}
 			title += `${__res.width}x${__res.height}`;
 			if (text.length > 0) {
@@ -288,10 +289,15 @@ export function Streamer() {
 			if (text.length > 0) {
 				title += text;
 			} else {
-				title += "Inactive";
+				title += "No stream from PiKVM";
 			}
 		}
 		el_grab.innerText = el_info.innerText = title;
+	};
+
+	var __organizeHook = function() {
+		let geo = self.getGeometry();
+		wm.setAspectRatio($("stream-window"), geo.width, geo.height);
 	};
 
 	var __resetStream = function(mode=null) {
@@ -303,16 +309,16 @@ export function Streamer() {
 		if (mode === "janus") {
 			let allow_audio = !$("stream-video").muted;
 			let allow_mic = $("stream-mic-switch").checked;
-			__streamer = new JanusStreamer(__setActive, __setInactive, __setInfo, orient, allow_audio, allow_mic);
+			__streamer = new JanusStreamer(__setActive, __setInactive, __setInfo, __organizeHook, orient, allow_audio, allow_mic);
 			// Firefox doesn't support RTP orientation:
 			//  - https://bugzilla.mozilla.org/show_bug.cgi?id=1316448
 			tools.feature.setEnabled($("stream-orient"), !tools.browser.is_firefox);
 		} else {
 			if (mode === "media") {
-				__streamer = new MediaStreamer(__setActive, __setInactive, __setInfo, orient);
+				__streamer = new MediaStreamer(__setActive, __setInactive, __setInfo, __organizeHook, orient);
 				tools.feature.setEnabled($("stream-orient"), true);
 			} else { // mjpeg
-				__streamer = new MjpegStreamer(__setActive, __setInactive, __setInfo);
+				__streamer = new MjpegStreamer(__setActive, __setInactive, __setInfo, __organizeHook);
 				tools.feature.setEnabled($("stream-orient"), false);
 			}
 			tools.feature.setEnabled($("stream-audio"), false); // Enabling in stream_janus.js

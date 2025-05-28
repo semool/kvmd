@@ -26,6 +26,7 @@
 import {ROOT_PREFIX} from "../vars.js";
 import {tools, $} from "../tools.js";
 import {wm} from "../wm.js";
+import {clipboard} from "./clipboard.js";
 
 
 export function Switch() {
@@ -234,7 +235,7 @@ export function Switch() {
 		if (edid_id && __state && __state.edids) {
 			let data = __state.edids.all[edid_id].data;
 			data = data.replace(/(.{32})/g, "$1\n");
-			wm.copyTextToClipboard(data);
+			clipboard.setText(data);
 		}
 	};
 
@@ -306,7 +307,7 @@ export function Switch() {
 			if (active < 0 || active >= __state.model.ports.length) {
 				$("switch-active-port").innerText = "N/A";
 			} else {
-				$("switch-active-port").innerText = "p" + __formatPort(__state.model, active);
+				$("switch-active-port").innerText = "p" + summary.active_id;
 			}
 			for (let port = 0; port < __state.model.ports.length; ++port) {
 				__setLedState($(`__switch-port-led-p${port}`), "green", (port === active));
@@ -361,7 +362,7 @@ export function Switch() {
 			content += `
 				<tr>
 					<td>Port:</td>
-					<td class="value">${__formatPort(model, port)}</td>
+					<td class="value">${pa.id}</td>
 					<td>&nbsp;&nbsp;</td>
 					<td>
 						<div class="buttons-row">
@@ -439,6 +440,7 @@ export function Switch() {
 
 		let model = __state.model;
 		let edids = __state.edids;
+		let pa = model.ports[port]; // Port attrs
 
 		let atx_actions = {
 			"power": "ATX power click",
@@ -459,12 +461,12 @@ export function Switch() {
 
 		let create_content = function(el_parent) {
 			let html = `
-				<table>
+				<table style="width: 100%">
 					<tr>
 						<td>Port name:</td>
 						<td><input
 							type="text" autocomplete="off" id="__switch-port-name-input"
-							value="${tools.escape(model.ports[port].name)}" placeholder="Host ${port + 1}"
+							value="${tools.escape(pa.name)}" placeholder="Host ${port + 1}"
 							style="width:100%"
 						/></td>
 					</tr>
@@ -473,9 +475,33 @@ export function Switch() {
 						<td><select id="__switch-port-edid-selector" style="width: 100%"></select></td>
 					</tr>
 				</table>
-				<hr>
-				<table>
 			`;
+
+			let fw = model.units[pa.unit].firmware;
+			if (fw.devbuild || fw.version >= 8) {
+				html += `
+					<hr>
+					<table style="width: 100%">
+						<tr>
+							<td>Simulate display on inactive port:</td>
+							<td align="right">
+								<div class="switch-box">
+									<input
+										type="checkbox" id="__switch-port-dummy-switch"
+										${pa.video.dummy ? "checked" : ""}
+									/>
+									<label for="__switch-port-dummy-switch">
+										<span class="switch-inner"></span>
+										<span class="switch"></span>
+									</label>
+								</div>
+							</td>
+						</tr>
+					</table>
+				`;
+			}
+
+			html += "<hr><table style=\"width: 100%\">";
 			for (let kv of Object.entries(atx_actions)) {
 				html += `
 					<tr>
@@ -491,6 +517,7 @@ export function Switch() {
 				`;
 			}
 			html += "</table>";
+
 			el_parent.innerHTML = html;
 
 			let el_selector = $("__switch-port-edid-selector");
@@ -511,32 +538,28 @@ export function Switch() {
 				let reset_default = tools.partial(function(el_slider, limits) {
 					tools.slider.setValue(el_slider, limits["default"]);
 				}, el_slider, limits);
-				tools.slider.setParams(el_slider, limits.min, limits.max, 0.5, model.ports[port].atx.click_delays[action], display_value);
+				tools.slider.setParams(el_slider, limits.min, limits.max, 0.5, pa.atx.click_delays[action], display_value);
 				tools.el.setOnClick($(`__switch-port-atx-click-${action}-delay-default-button`), reset_default);
 			}
 		};
 
-		wm.modal(`Port ${__formatPort(__state.model, port)} settings`, create_content, true, true).then(function(ok) {
+		wm.modal(`Port ${pa.id} settings`, create_content, true, true).then(function(ok) {
 			if (ok) {
 				let params = {
 					"port": port,
 					"edid_id": $("__switch-port-edid-selector").value,
 					"name": $("__switch-port-name-input").value,
 				};
+				let el_dummy_switch = $("__switch-port-dummy-switch");
+				if (el_dummy_switch) { // Only for devbuild or firmware >= 8
+					params["dummy"] = $("__switch-port-dummy-switch").checked;
+				}
 				for (let action of Object.keys(atx_actions)) {
 					params[`atx_click_${action}_delay`] = tools.slider.getValue($(`__switch-port-atx-click-${action}-delay-slider`));
 				};
 				__sendPost("api/switch/set_port_params", params);
 			}
 		});
-	};
-
-	var __formatPort = function(model, port) {
-		if (model.units.length > 1) {
-			return `${model.ports[port].unit + 1}.${model.ports[port].channel + 1}`;
-		} else {
-			return `${port + 1}`;
-		}
 	};
 
 	var __setLedState = function(el, color, on) {

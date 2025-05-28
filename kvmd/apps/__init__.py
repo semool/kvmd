@@ -74,6 +74,7 @@ from ..validators.os import valid_unix_mode
 from ..validators.os import valid_options
 from ..validators.os import valid_command
 
+from ..validators.net import valid_ip
 from ..validators.net import valid_ip_or_host
 from ..validators.net import valid_net
 from ..validators.net import valid_port
@@ -360,6 +361,11 @@ def _get_config_scheme() -> dict:
                 "enabled": Option(True, type=valid_bool),
                 "expire":  Option(0,    type=valid_expire),
 
+                "usc": {
+                    "users":  Option([], type=valid_users_list),  # PiKVM username has a same regex as a UNIX username
+                    "groups": Option(["kvmd-selfauth"], type=valid_users_list),  # groupname has a same regex as a username
+                },
+
                 "internal": {
                     "type":        Option("htpasswd"),
                     "force_users": Option([], type=valid_users_list),
@@ -459,7 +465,7 @@ def _get_config_scheme() -> dict:
 
                 "unix":    Option("/run/kvmd/ustreamer.sock", type=valid_abs_path, unpack_as="unix_path"),
                 "timeout": Option(2.0, type=valid_float_f01),
-                "snapshot_timeout": Option(1.0, type=valid_float_f01),  # error_delay * 3 + 1
+                "snapshot_timeout": Option(5.0, type=valid_float_f01),  # error_delay * 3 + 1
 
                 "process_name_prefix": Option("kvmd/streamer"),
 
@@ -737,7 +743,7 @@ def _get_config_scheme() -> dict:
             "desired_fps":     Option(30, type=valid_stream_fps),
             "mouse_output":    Option("usb", type=valid_hid_mouse_output),
             "keymap":          Option("/usr/share/kvmd/keymaps/en-us", type=valid_abs_file),
-            "allow_cut_after": Option(3.0, type=valid_float_f0),
+            "scroll_rate":     Option(4,   type=functools.partial(valid_number, min=1, max=30)),
 
             "server": {
                 "host":        Option("",   type=valid_ip_or_host, if_empty=""),
@@ -789,8 +795,8 @@ def _get_config_scheme() -> dict:
 
             "auth": {
                 "vncauth": {
-                    "enabled": Option(False, type=valid_bool),
-                    "file":    Option("/etc/kvmd/vncpasswd", type=valid_abs_file, unpack_as="path"),
+                    "enabled": Option(False, type=valid_bool, unpack_as="vncpass_enabled"),
+                    "file":    Option("/etc/kvmd/vncpasswd", type=valid_abs_file, unpack_as="vncpass_path"),
                 },
                 "vencrypt": {
                     "enabled": Option(True, type=valid_bool, unpack_as="vencrypt_enabled"),
@@ -798,13 +804,24 @@ def _get_config_scheme() -> dict:
             },
         },
 
+        "localhid": {
+            "kvmd": {
+                "unix":    Option("/run/kvmd/kvmd.sock", type=valid_abs_path, unpack_as="unix_path"),
+                "timeout": Option(5.0, type=valid_float_f01),
+            },
+        },
+
         "nginx": {
             "http": {
-                "port": Option(80, type=valid_port),
+                "ipv4": Option("0.0.0.0", type=functools.partial(valid_ip, v6=False)),
+                "ipv6": Option("::",      type=functools.partial(valid_ip, v4=False)),
+                "port": Option(80,        type=valid_port),
             },
             "https": {
-                "enabled": Option(True, type=valid_bool),
-                "port":    Option(443,  type=valid_port),
+                "enabled": Option(True,      type=valid_bool),
+                "ipv4":    Option("0.0.0.0", type=functools.partial(valid_ip, v6=False)),
+                "ipv6":    Option("::",      type=functools.partial(valid_ip, v4=False)),
+                "port":    Option(443,       type=valid_port),
             },
         },
 

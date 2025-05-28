@@ -33,14 +33,23 @@ export function Paste(__recorder) {
 	/************************************************************************/
 
 	var __init__ = function() {
+		$("hid-pak-text").addEventListener("keyup", function(ev) {
+			if (ev.ctrlKey && ev.code == "Enter") {
+				$("hid-pak-button").click();
+			}
+		});
+
 		tools.storage.bindSimpleSwitch($("hid-pak-ask-switch"), "hid.pak.ask", true);
 		tools.storage.bindSimpleSwitch($("hid-pak-slow-switch"), "hid.pak.slow", false);
+
 		tools.storage.bindSimpleSwitch($("hid-pak-secure-switch"), "hid.pak.secure", false, function(value) {
 			$("hid-pak-text").style.setProperty("-webkit-text-security", (value ? "disc" : "none"));
 		});
+
 		$("hid-pak-keymap-selector").addEventListener("change", function() {
 			tools.storage.set("hid.pak.keymap", $("hid-pak-keymap-selector").value);
 		});
+
 		tools.el.setOnClick($("hid-pak-button"), __clickPasteAsKeysButton);
 	};
 
@@ -84,7 +93,7 @@ export function Paste(__recorder) {
 					} else if (http.status === 200) {
 						__recorder.recordPrintEvent(text, keymap, slow);
 					}
-				}, text, "text/plain");
+				}, text, "text/plain", 7 * 24 * 3600);
 			};
 
 			if ($("hid-pak-ask-switch").checked) {
