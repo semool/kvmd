@@ -39,7 +39,7 @@ for _variant in "${_variants[@]}"; do
 	pkgname+=(kvmd-platform-$_platform-$_board)
 done
 pkgbase=kvmd
-pkgver=4.76
+pkgver=4.92
 pkgrel=1
 pkgdesc="The main PiKVM daemon"
 url="https://github.com/pikvm/kvmd"
@@ -123,7 +123,7 @@ depends=(
 	# fsck for /boot
 	dosfstools
 
-	# pgrep for kvmd-udev-restart-pass
+	# pgrep for kvmd-udev-restart-pass, sysctl for kvmd-otgnet
 	procps-ng
 
 	# Misc
@@ -166,7 +166,9 @@ package_kvmd() {
 
 	install -Dm755 -t "$pkgdir/usr/bin" scripts/kvmd-{bootconfig,gencert,certbot}
 
-	install -Dm644 -t "$pkgdir/usr/lib/systemd/system" configs/os/services/*
+	install -dm755 "$pkgdir/usr/lib/systemd/system"
+	cp -rd configs/os/services -T "$pkgdir/usr/lib/systemd/system"
+
 	install -DTm644 configs/os/sysusers.conf "$pkgdir/usr/lib/sysusers.d/kvmd.conf"
 	install -DTm644 configs/os/tmpfiles.conf "$pkgdir/usr/lib/tmpfiles.d/kvmd.conf"
 
@@ -201,6 +203,7 @@ package_kvmd() {
 	mkdir -p "$pkgdir/etc/kvmd/override.d"
 
 	mkdir -p "$pkgdir/var/lib/kvmd/"{msd,pst}
+	chmod 1775 "$pkgdir/var/lib/kvmd/pst"
 }
 
 

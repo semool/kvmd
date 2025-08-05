@@ -72,7 +72,7 @@ class BaseHid(BasePlugin):  # pylint: disable=too-many-instance-attributes
         self.__j_active = jiggler_active
         self.__j_interval = jiggler_interval
         self.__j_absolute = True
-        self.__j_activity_ts = 0
+        self.__j_activity_ts = self.__get_monotonic_seconds()
         self.__j_last_x = 0
         self.__j_last_y = 0
 
@@ -143,17 +143,22 @@ class BaseHid(BasePlugin):  # pylint: disable=too-many-instance-attributes
 
     # =====
 
+    def get_inactivity_seconds(self) -> int:
+        return (self.__get_monotonic_seconds() - self.__j_activity_ts)
+
+    # =====
+
     async def send_key_events(
         self,
         keys: Iterable[tuple[int, bool]],
         no_ignore_keys: bool=False,
-        slow: bool=False,
+        delay: float=0.0,
     ) -> None:
 
         for (key, state) in keys:
             if no_ignore_keys or key not in self.__ignore_keys:
-                if slow:
-                    await asyncio.sleep(0.02)
+                if delay > 0:
+                    await asyncio.sleep(delay)
                 self.send_key_event(key, state, False)
 
     def send_key_event(self, key: int, state: bool, finish: bool) -> None:
@@ -249,7 +254,10 @@ class BaseHid(BasePlugin):  # pylint: disable=too-many-instance-attributes
                 handler(*xy)
 
     def __bump_activity(self) -> None:
-        self.__j_activity_ts = int(time.monotonic())
+        self.__j_activity_ts = self.__get_monotonic_seconds()
+
+    def __get_monotonic_seconds(self) -> int:
+        return int(time.monotonic())
 
     def _set_jiggler_absolute(self, absolute: bool) -> None:
         self.__j_absolute = absolute
@@ -271,7 +279,7 @@ class BaseHid(BasePlugin):  # pylint: disable=too-many-instance-attributes
 
     async def systask(self) -> None:
         while True:
-            if self.__j_active and (self.__j_activity_ts + self.__j_interval < int(time.monotonic())):
+            if self.__j_active and (self.__j_activity_ts + self.__j_interval < self.__get_monotonic_seconds()):
                 if self.__j_absolute:
                     (x, y) = (self.__j_last_x, self.__j_last_y)
                     for move in [100, -100, 100, -100, 0]:

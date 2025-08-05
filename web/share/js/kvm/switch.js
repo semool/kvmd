@@ -46,6 +46,7 @@ export function Switch() {
 		tools.el.setOnClick($("switch-edid-copy-data-button"), __clickCopyEdidDataButton);
 
 		tools.storage.bindSimpleSwitch($("switch-atx-ask-switch"), "switch.atx.ask", true);
+		tools.storage.bindSimpleSwitch($("switch-msd-ask-switch"), "switch.msd.ask", true);
 
 		for (let role of ["inactive", "active", "flashing", "beacon", "bootloader"]) {
 			let el_brightness = $(`switch-color-${role}-brightness-slider`);
@@ -484,18 +485,7 @@ export function Switch() {
 					<table style="width: 100%">
 						<tr>
 							<td>Simulate display on inactive port:</td>
-							<td align="right">
-								<div class="switch-box">
-									<input
-										type="checkbox" id="__switch-port-dummy-switch"
-										${pa.video.dummy ? "checked" : ""}
-									/>
-									<label for="__switch-port-dummy-switch">
-										<span class="switch-inner"></span>
-										<span class="switch"></span>
-									</label>
-								</div>
-							</td>
+							<td align="right">${tools.sw.makeItem("__switch-port-dummy-switch", pa.video.dummy)}</td>
 						</tr>
 					</table>
 				`;
@@ -574,13 +564,24 @@ export function Switch() {
 	};
 
 	var __switchActivePort = function(port) {
+		let switch_port = () => __sendPost("api/switch/set_active", {"port": port});
 		if (__msd_connected) {
-			wm.error(`
-				Oops! Before port switching, please disconnect an active Mass Storage Drive image first.
-				Otherwise, it will break a current USB operation (OS installation, Live CD, or whatever).
-			`);
+			if ($("switch-msd-ask-switch").checked) {
+				wm.confirm(`
+					The Mass Storage Drive is active.<br><br>
+					If you switch the port now, it will break a current USB disk operation<br>
+					(OS installation, Live CD, or whatever).<br><br>
+					Are you sure you want to continue a port switching?
+				`).then(function(ok) {
+					if (ok) {
+						switch_port();
+					}
+				});
+			} else {
+				switch_port();
+			}
 		} else {
-			__sendPost("api/switch/set_active", {"port": port});
+			switch_port();
 		}
 	};
 
@@ -603,9 +604,7 @@ export function Switch() {
 	};
 
 	var __atxClick = function(port, button) {
-		let click_button = function() {
-			__sendPost("api/switch/atx/click", {"port": port, "button": button});
-		};
+		let click_button = () => __sendPost("api/switch/atx/click", {"port": port, "button": button});
 		if ($("switch-atx-ask-switch").checked) {
 			wm.confirm(`
 				Are you sure you want to press the <b>${tools.escape(button)}</b> button?<br>

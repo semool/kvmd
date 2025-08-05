@@ -108,12 +108,36 @@ export function Streamer() {
 		tools.el.setOnClick($("stream-screenshot-button"), __clickScreenshotButton);
 		tools.el.setOnClick($("stream-reset-button"), __clickResetButton);
 
-		$("stream-window").show_hook = () => __applyState(__state);
-		$("stream-window").close_hook = () => __applyState(null);
+		tools.storage.bindSimpleSwitch($("stream-suspend-switch"), "stream.suspend", false, __visibilityHook);
+
+		$("stream-window").show_hook = __visibilityHook;
+		$("stream-window").close_hook = __visibilityHook;
 		$("stream-window").organize_hook = __organizeHook;
+
+		document.addEventListener("visibilitychange", __visibilityHook);
 	};
 
 	/************************************************************************/
+
+	var __isStreamRequired = function() {
+		return (
+			wm.isWindowVisible($("stream-window"))
+			&& (
+				!$("stream-suspend-switch").checked
+				|| (document.visibilityState === "visible")
+			)
+		);
+	};
+
+	var __visibilityHook = function() {
+		let req = __isStreamRequired();
+		__applyState(req ? __state : null);
+	};
+
+	var __organizeHook = function() {
+		let geo = self.getGeometry();
+		wm.setAspectRatio($("stream-window"), geo.width, geo.height);
+	};
 
 	self.ensureDeps = function(callback) {
 		JanusStreamer.ensure_janus(function(avail) {
@@ -161,13 +185,13 @@ export function Streamer() {
 			__state = null;
 			__setControlsEnabled(false);
 		}
-		let visible = wm.isWindowVisible($("stream-window"));
-		__applyState((visible && __state && __state.features) ? state : null);
+		__applyState((__isStreamRequired() && __state && __state.features) ? state : null);
 	};
 
 	var __applyState = function(state) {
 		if (__janus_imported === null) {
-			alert("__janus_imported is null, please report");
+			// XXX: This warning is triggered by visibilitychange event via the __visibilityHook()
+			// alert("__janus_imported is null, please report");
 			return;
 		}
 
@@ -295,11 +319,6 @@ export function Streamer() {
 		el_grab.innerText = el_info.innerText = title;
 	};
 
-	var __organizeHook = function() {
-		let geo = self.getGeometry();
-		wm.setAspectRatio($("stream-window"), geo.width, geo.height);
-	};
-
 	var __resetStream = function(mode=null) {
 		if (mode === null) {
 			mode = __streamer.getMode();
@@ -324,7 +343,7 @@ export function Streamer() {
 			tools.feature.setEnabled($("stream-audio"), false); // Enabling in stream_janus.js
 			tools.feature.setEnabled($("stream-mic"), false); // Ditto
 		}
-		if (wm.isWindowVisible($("stream-window"))) {
+		if (__isStreamRequired()) {
 			__streamer.ensureStream((__state && __state.streamer !== undefined) ? __state.streamer : null);
 		}
 	};
@@ -345,7 +364,7 @@ export function Streamer() {
 	};
 
 	var __clickResetButton = function() {
-		wm.confirm("Are you sure you want to reset stream?").then(function(ok) {
+		wm.confirm("Are you sure you want to reset the stream?").then(function(ok) {
 			if (ok) {
 				__resetStream();
 				tools.httpPost("api/streamer/reset", null, function(http) {
