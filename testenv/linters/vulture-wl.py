@@ -22,11 +22,15 @@ SpiDev.no_cs
 SpiDev.cshigh
 SpiDev.max_speed_hz
 
+Pwm.get_period_ns
+Pwm.get_polarity
+Pwm.set_polarity
+
 _DriveImage.complete
 
 _AtxApiPart.switch_power
 
-_UsbKey.arduino_modifier_code
+_UsbKey.arduino_mod_code
 
 _KeyMapping.web_name
 _KeyMapping.evdev_name
@@ -55,6 +59,9 @@ _Edid.set_monitor_serial
 _Edid.set_audio
 
 Dumper.ignore_aliases
+_YamlHandler.Representer
+_YamlHandler.preserve_quotes
+SequenceNode.flow_style
 
 _auth_server_port_fixture
 _test_user

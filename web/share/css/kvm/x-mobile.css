@@ -20,49 +20,6 @@
 *****************************************************************************/
 
 
-/* ===== stream.css ===== */
-
-div#stream-window {
-	padding-top: 3px !important;
-	padding-bottom: 80px !important;
-	border-top: 0 !important;
-	border-left: 0 !important;
-	border-right: 0 !important;
-	border-radius: 0 !important;
-	top: 50px !important;
-	left: 50% !important;
-	width: 100% !important;
-	-webkit-transform: translateX(-50%) !important;
-	transform: translateX(-50%) !important;
-
-	/* Ignore stream's resize_hook() */
-	aspect-ratio: unset !important;
-	max-width: unset !important;
-	max-height: unset !important;
-}
-
-div#stream-window::after {
-	display: none;
-}
-
-div#stream-window-header {
-	display: none !important;
-}
-
-div#stream-info {
-	display: block !important;
-	margin: 0;
-	padding: 0;
-	padding-bottom: 3px;
-	font-size: 0.8em;
-	color: var(--cs-window-header-default-fg);
-}
-
-div#stream-mouse-buttons {
-	display: block !important;
-}
-
-
 /* ===== keyboard.css ===== */
 
 div#keyboard-window {
@@ -91,4 +48,14 @@ div#keyboard-desktop {
 
 div#keyboard-mobile {
 	display: block !important;
+}
+
+/* ===== Misc ===== */
+
+button#navbar-show-button {
+	display: none !important;
+}
+
+div#mouse-window button[data-wm-window-close] {
+	display: none !important;
 }

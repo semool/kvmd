@@ -24,6 +24,7 @@ import os
 
 from .. import tools
 
+from typing import Generator
 from typing import IO
 from typing import Any
 
@@ -43,6 +44,17 @@ def load_yaml_file(path: str) -> Any:
         except Exception as ex:
             # Reraise internal exception as standard ValueError and show the incorrect file
             raise ValueError(f"Invalid YAML in the file {path!r}:\n{tools.efmt(ex)}") from None
+
+
+def listed_yaml_dir(path: str) -> Generator[str]:
+    for name in sorted(os.listdir(path)):
+        # TODO: We want to handle *.yaml or even *.yml,
+        # but but previously we didn't have such filters
+        # so we need to keep unfildered list processing
+        # for backward compatibility.
+        file_path = os.path.join(path, name)
+        if os.path.isfile(file_path) or os.path.islink(file_path):
+            yield file_path
 
 
 # =====
@@ -69,10 +81,8 @@ class _YamlLoader(yaml.SafeLoader):
             assert inc, inc
             inc_path = os.path.join(self.__root, inc)
             if os.path.isdir(inc_path):
-                for child in sorted(os.listdir(inc_path)):
-                    child_path = os.path.join(inc_path, child)
-                    if os.path.isfile(child_path) or os.path.islink(child_path):
-                        yaml_merge(tree, (load_yaml_file(child_path) or {}), child_path)
+                for child_path in listed_yaml_dir(inc_path):
+                    yaml_merge(tree, (load_yaml_file(child_path) or {}), child_path)
             else:  # Try file
                 yaml_merge(tree, (load_yaml_file(inc_path) or {}), inc_path)
         return tree

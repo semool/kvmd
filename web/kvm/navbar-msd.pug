@@ -1,9 +1,9 @@
 li.right.feature-disabled#msd-dropdown
-	a.menu-button(href="#")
+	.menu-item.menu-button(href="#")
 		+navbar_led("msd-led", "led-msd")
 		span Drive
 
-	.menu#msd-menu
+	.hidden.menu#msd-menu
 		.text
 			b Mass Storage Drive: 
 			span#msd-status
@@ -38,10 +38,17 @@ li.right.feature-disabled#msd-dropdown
 
 		table.kv
 			tr
+				td(colspan="100")
+					.radio-box(style="justify-self: flex-end;")
+						+menu_radio_items("msd-sorting-radio", [
+							{title: "Sort by name", value: "name", checked: true},
+							{title: "Newest first", value: "mtime"},
+						])
+			tr
 				td Image:
 				td(width="100%") #[select#msd-image-selector(disabled)]
 				td #[button#msd-download-button(disabled title="Download image") #[b &nbsp;&nbsp;&#x21E9;&nbsp;&nbsp;]]
-				td #[button#msd-remove-button(disabled title="Remove image") #[b &nbsp;&nbsp;&times;&nbsp;&nbsp;]]
+				td #[button#msd-remove-button(disabled title="Remove image") #[b &nbsp;&nbsp;&#10005;&nbsp;&nbsp;]]
 
 		table.kv
 			tr

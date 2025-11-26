@@ -1,9 +1,9 @@
-python-periphery
 pyserial-asyncio
-git+https://opendev.org/x/pyghmi.git#33cff21882b6782c20b054e6e8adcf94b5e09561
+pyghmi
 spidev
 pyrad
 types-PyYAML
 types-aiofiles
+luma.core>=2.5.2
 luma.oled
 gpiod>=2.3

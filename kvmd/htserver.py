@@ -268,6 +268,7 @@ def parse_ws_event(msg: str) -> tuple[str, dict]:
 
 # =====
 _REQUEST_AUTH_INFO = "_kvmd_auth_info"
+_REQUEST_AUTH_TOKEN = "_kvmd_auth_token"
 
 
 def _format_P(req: BaseRequest, *_, **__) -> str:  # type: ignore  # pylint: disable=invalid-name
@@ -277,8 +278,13 @@ def _format_P(req: BaseRequest, *_, **__) -> str:  # type: ignore  # pylint: dis
 AccessLogger._format_P = staticmethod(_format_P)  # type: ignore  # pylint: disable=protected-access
 
 
-def set_request_auth_info(req: BaseRequest, info: str) -> None:
+def set_request_auth_info(req: BaseRequest, info: str, token: str="") -> None:
     setattr(req, _REQUEST_AUTH_INFO, info)
+    setattr(req, _REQUEST_AUTH_TOKEN, token)
+
+
+def _get_request_auth_token(req: BaseRequest) -> str:
+    return str(getattr(req, _REQUEST_AUTH_TOKEN, ""))
 
 
 @dataclasses.dataclass(frozen=True)
@@ -313,7 +319,8 @@ def get_request_unix_credentials(req: BaseRequest) -> (RequestUnixCredentials | 
 # =====
 @dataclasses.dataclass(frozen=True)
 class WsSession:
-    wsr: WebSocketResponse
+    wsr:    WebSocketResponse
+    token:  str
     kwargs: dict[str, Any] = dataclasses.field(hash=False)
 
     def __str__(self) -> str:
@@ -326,11 +333,20 @@ class WsSession:
             and self.wsr._req.transport is not None  # pylint: disable=protected-access
         )
 
+    async def close(self) -> None:
+        try:
+            await self.wsr.close()
+        except Exception:
+            pass
+
     async def send_event(self, event_type: str, event: (dict | None)) -> None:
         await send_ws_event(self.wsr, event_type, event)
 
     async def send_bin(self, op: int, data: bytes) -> None:
         await send_ws_bin(self.wsr, op, data)
+
+    async def send_bin_raw(self, data: bytes) -> None:
+        await self.wsr.send_bytes(data)
 
 
 class HttpServer:
@@ -339,7 +355,6 @@ class HttpServer:
         self.__ws_handlers: dict[str, Callable] = {}
         self.__ws_bin_handlers: dict[int, Callable] = {}
         self.__ws_sessions: list[WsSession] = []
-        self.__ws_sessions_lock = asyncio.Lock()
 
     def run(
         self,
@@ -407,17 +422,16 @@ class HttpServer:
         assert self.__ws_heartbeat is not None
         wsr = WebSocketResponse(heartbeat=self.__ws_heartbeat)
         await wsr.prepare(req)
-        ws = WsSession(wsr, kwargs)
-
-        async with self.__ws_sessions_lock:
-            self.__ws_sessions.append(ws)
-            get_logger(2).info("Registered new client session: %s; clients now: %d", ws, len(self.__ws_sessions))
+        ws = WsSession(wsr, _get_request_auth_token(req), kwargs)
 
         try:
-            await self._on_ws_opened(ws)
+            self.__add_ws(ws)
             yield ws
         finally:
-            await aiotools.shield_fg(self.__close_ws(ws))
+            try:
+                self.__remove_ws(ws)
+            finally:
+                await aiotools.shield_fg(ws.close())
 
     async def _ws_loop(self, ws: WsSession) -> WebSocketResponse:
         logger = get_logger()
@@ -454,23 +468,28 @@ class HttpServer:
             ], return_exceptions=True)
 
     async def _close_all_wss(self) -> bool:
-        wss = self._get_wss()
+        wss = list(self.__ws_sessions)
         for ws in wss:
-            await self.__close_ws(ws)
+            self.__remove_ws(ws)
+        await asyncio.gather(*[
+            ws.close()
+            for ws in wss
+        ], return_exceptions=True)
         return bool(wss)
 
     def _get_wss(self) -> list[WsSession]:
         return list(self.__ws_sessions)
 
-    async def __close_ws(self, ws: WsSession) -> None:
-        async with self.__ws_sessions_lock:
-            try:
-                self.__ws_sessions.remove(ws)
-                get_logger(3).info("Removed client socket: %s; clients now: %d", ws, len(self.__ws_sessions))
-                await ws.wsr.close()
-            except Exception:
-                pass
-        await self._on_ws_closed(ws)
+    def __add_ws(self, ws: WsSession) -> None:
+        self.__ws_sessions.append(ws)
+        get_logger(3).info("Registered new client session: %s; clients now: %d", ws, len(self.__ws_sessions))
+        self._on_ws_added(ws)
+
+    def __remove_ws(self, ws: WsSession) -> None:
+        if ws in self.__ws_sessions:
+            self.__ws_sessions.remove(ws)
+            get_logger(3).info("Removed client socket: %s; clients now: %d", ws, len(self.__ws_sessions))
+            self._on_ws_removed(ws)
 
     # =====
 
@@ -486,10 +505,10 @@ class HttpServer:
     async def _on_cleanup(self) -> None:
         pass
 
-    async def _on_ws_opened(self, ws: WsSession) -> None:
+    def _on_ws_added(self, ws: WsSession) -> None:
         pass
 
-    async def _on_ws_closed(self, ws: WsSession) -> None:
+    def _on_ws_removed(self, ws: WsSession) -> None:
         pass
 
     # =====

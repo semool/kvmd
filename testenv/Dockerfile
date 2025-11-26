@@ -3,7 +3,7 @@ FROM archlinux/archlinux:base
 RUN mkdir -p /etc/pacman.d/hooks \
 	&& ln -s /dev/null /etc/pacman.d/hooks/30-systemd-tmpfiles.hook
 
-RUN echo 'Server = https://mirror.rackspace.com/archlinux/$repo/os/$arch' > /etc/pacman.d/mirrorlist \
+RUN echo 'Server = https://fastly.mirror.pkgbuild.com/$repo/os/$arch' > /etc/pacman.d/mirrorlist \
 	&& pacman-key --init \
 	&& pacman-key --populate archlinux
 
@@ -43,11 +43,13 @@ RUN \
 		python-tox \
 		python-mako \
 		python-yaml \
+		python-ruamel-yaml \
 		python-aiohttp \
 		python-aiofiles \
 		python-async-lru \
 		python-passlib \
-		python-bcrypt \
+		# See kvmd/crypto.py
+		# python-bcrypt \
 		python-pyotp \
 		python-qrcode \
 		python-pyserial \
@@ -114,6 +116,7 @@ RUN mkdir -p \
 		/etc/kvmd/{nginx,vnc} \
 		/var/lib/kvmd/msd \
 		/var/lib/kvmd/pst/data \
+		/usr/lib/kvmd \
 		/opt/vc/bin
 
 COPY testenv/fakes/vcgencmd /usr/bin/

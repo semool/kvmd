@@ -20,15 +20,18 @@
 # ========================================================================== #
 
 
+import os
+import tempfile
 import asyncio
 import operator
-import functools
+import contextlib
 import multiprocessing.queues
 import queue
 import shlex
 
 from typing import Generator
 from typing import TypeVar
+from typing import Any
 
 
 # =====
@@ -47,13 +50,6 @@ def efmt(ex: Exception) -> str:
 
 
 # =====
-def rget(dct: dict, *keys: str) -> dict:
-    result = functools.reduce((lambda nxt, key: nxt.get(key, {})), keys, dct)
-    if not isinstance(result, dict):
-        raise TypeError(f"Not a dict as result: {result!r} from {dct!r} at {list(keys)}")
-    return result
-
-
 _DictKeyT = TypeVar("_DictKeyT")
 _DictValueT = TypeVar("_DictValueT")
 
@@ -64,6 +60,32 @@ def sorted_kvs(dct: dict[_DictKeyT, _DictValueT]) -> list[tuple[_DictKeyT, _Dict
 
 def swapped_kvs(dct: dict[_DictKeyT, _DictValueT]) -> dict[_DictValueT, _DictKeyT]:
     return {value: key for (key, value) in dct.items()}
+
+
+def walk_dict(kvs: Any, *path: str) -> dict:
+    if not isinstance(kvs, dict):
+        raise TypeError("Not a dict on the top level")
+    passed: list[str] = []
+    for key in path:
+        if key not in kvs:
+            return {}
+        kvs = kvs[key]
+        passed.append(key)
+        if not isinstance(kvs, dict):
+            raise TypeError(f"Not a dict on the path: {'/'.join(passed) or '/'}")
+    return kvs
+
+
+def is_dict(kvs: Any, *path: str) -> bool:
+    if not isinstance(kvs, dict):
+        return False
+    for key in path:
+        if key not in kvs:
+            return False
+        kvs = kvs[key]
+        if not isinstance(kvs, dict):
+            return False
+    return True
 
 
 # =====
@@ -93,3 +115,26 @@ def passwds_splitted(text: str) -> Generator[tuple[int, str]]:
         if len(ls) == 0 or ls.startswith("#"):
             continue
         yield (lineno, line)
+
+
+# =====
+@contextlib.contextmanager
+def atomic_file_edit(path: str) -> Generator[str]:
+    (tmp_fd, tmp_path) = tempfile.mkstemp(
+        prefix=f".{os.path.basename(path)}.",
+        dir=os.path.dirname(path),
+    )
+    try:
+        try:
+            st = os.stat(path)
+            with open(path, "rb") as file:
+                os.write(tmp_fd, file.read())
+                os.fchown(tmp_fd, st.st_uid, st.st_gid)
+                os.fchmod(tmp_fd, st.st_mode)
+        finally:
+            os.close(tmp_fd)
+        yield tmp_path
+        os.rename(tmp_path, path)
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)

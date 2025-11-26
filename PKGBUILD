@@ -39,7 +39,7 @@ for _variant in "${_variants[@]}"; do
 	pkgname+=(kvmd-platform-$_platform-$_board)
 done
 pkgbase=kvmd
-pkgver=4.100
+pkgver=4.127
 pkgrel=1
 pkgdesc="The main PiKVM daemon"
 url="https://github.com/pikvm/kvmd"
@@ -49,15 +49,14 @@ depends=(
 	"python>=3.13"
 	"python<3.14"
 	python-yaml
+	python-ruamel-yaml
 	python-aiohttp
 	python-aiofiles
 	python-async-lru
 	python-passlib
-	# python-bcrypt is needed for passlib
-	python-bcrypt
+	# python-bcrypt
 	python-pyotp
 	python-qrcode
-	python-periphery
 	python-pyserial
 	python-pyserial-asyncio
 	python-spidev
@@ -79,6 +78,7 @@ depends=(
 	python-ldap
 	python-zstandard
 	python-mako
+	"python-luma-core>=2.5.2"
 	python-luma-oled
 	python-pyusb
 	python-pyudev
@@ -97,7 +97,7 @@ depends=(
 	certbot
 	"raspberrypi-io-access>=0.7"
 	raspberrypi-utils
-	"ustreamer>=6.37"
+	"ustreamer>=6.41"
 
 	# Systemd UDEV bug
 	"systemd>=248.3-2"
@@ -117,6 +117,8 @@ depends=(
 	# FIXME:
 	#   - https://archlinuxarm.org/forum/viewtopic.php?f=15&t=17007&p=72789
 	#   - https://github.com/pikvm/pikvm/issues/1375
+	# Update at 2025.11.10: Still not fixed.
+	#   - https://github.com/pikvm/pikvm/issues/1604
 	wpa_supplicant-pikvm
 	run-parts
 
@@ -138,6 +140,9 @@ conflicts=(
 	platformio
 	avrdude-pikvm
 	kvmd-oled
+
+	# See kvmd/crypto.py
+	python-bcrypt
 )
 makedepends=(
 	python-setuptools
@@ -146,7 +151,7 @@ makedepends=(
 source=("$url/archive/v$pkgver.tar.gz")
 md5sums=(SKIP)
 backup=(
-	etc/kvmd/{override,logging,auth,meta}.yaml
+	etc/kvmd/{override,meta}.yaml
 	etc/kvmd/{ht,ipmi,vnc}passwd
 	etc/kvmd/totp.secret
 	etc/kvmd/nginx/{kvmd.ctx-{http,server},certbot.ctx-server}.conf
@@ -159,7 +164,7 @@ backup=(
 
 
 package_kvmd() {
-	install=$pkgname.install
+	install=kvmd.install
 
 	cd "$srcdir/kvmd-$pkgver"
 	pip install --root="$pkgdir" --no-deps .
@@ -215,14 +220,12 @@ for _variant in "${_variants[@]}"; do
 	eval "package_kvmd-platform-$_platform-$_board() {
 		cd \"kvmd-\$pkgver\"
 
-		pkgdesc=\"PiKVM platform configs - $_platform for $_board\"
-		depends=(kvmd=$pkgver-$pkgrel \"linux-rpi-pikvm>=6.6.45-13\" \"raspberrypi-bootloader-pikvm>=20240818-1\")
+		install=platform.install
 
-		backup=(
-			etc/sysctl.d/99-kvmd.conf
-			etc/udev/rules.d/99-kvmd.rules
-			etc/kvmd/main.yaml
-		)
+		backup=()
+
+		pkgdesc=\"PiKVM platform configs - $_platform for $_board\"
+		depends=(kvmd=$pkgver-$pkgrel \"linux-rpi-pikvm>=6.12.56-1\" \"raspberrypi-bootloader-pikvm>=20251031-1\")
 
 		if [[ $_base == v0 ]]; then
 			depends=(\"\${depends[@]}\" platformio-core avrdude make patch)
@@ -237,20 +240,19 @@ for _variant in "${_variants[@]}"; do
 			install -Dm755 -t \"\$pkgdir/usr/bin\" scripts/kvmd-udev-restart-pass
 		fi
 
-		install -DTm644 configs/os/sysctl.conf \"\$pkgdir/etc/sysctl.d/99-kvmd.conf\"
+		install -DTm644 configs/os/sysctl.conf \"\$pkgdir/usr/lib/sysctl.d/99-kvmd.conf\"
 		install -DTm644 configs/os/udev/common.rules \"\$pkgdir/usr/lib/udev/rules.d/99-kvmd-common.rules\"
-		install -DTm644 configs/os/udev/$_platform-$_board.rules \"\$pkgdir/etc/udev/rules.d/99-kvmd.rules\"
-		install -DTm444 configs/kvmd/main/$_platform-$_board.yaml \"\$pkgdir/etc/kvmd/main.yaml\"
+		install -DTm644 configs/os/udev/$_platform-$_board.rules \"\$pkgdir/usr/lib/udev/rules.d/99-kvmd.rules\"
+		install -DTm644 configs/kvmd/main/$_platform-$_board.yaml \"\$pkgdir/usr/lib/kvmd/main.yaml\"
+
+		if [ -f configs/os/modules-load/$_platform.conf ]; then
+			install -DTm644 configs/os/modules-load/$_platform.conf \"\$pkgdir/usr/lib/modules-load.d/kvmd.conf\"
+		fi
 
 		if [ -f configs/kvmd/fan/$_platform.ini ]; then
 			backup=(\"\${backup[@]}\" etc/kvmd/fan.ini)
 			depends=(\"\${depends[@]}\" \"kvmd-fan>=0.18\")
 			install -DTm444 configs/kvmd/fan/$_platform.ini \"\$pkgdir/etc/kvmd/fan.ini\"
-		fi
-
-		if [ -f configs/os/modules-load/$_platform.conf ]; then
-			backup=(\"\${backup[@]}\" etc/modules-load.d/kvmd.conf)
-			install -DTm644 configs/os/modules-load/$_platform.conf \"\$pkgdir/etc/modules-load.d/kvmd.conf\"
 		fi
 
 		if [ -f configs/os/sudoers/$_platform ]; then
@@ -268,8 +270,8 @@ for _variant in "${_variants[@]}"; do
 			install -DTm444 configs/kvmd/edid/_no-1920x1200.hex \"\$pkgdir/etc/kvmd/switch-edid.hex\"
 		fi
 
-		mkdir -p \"\$pkgdir/usr/share/kvmd\"
-		local _platform=\"\$pkgdir/usr/share/kvmd/platform\"
+		mkdir -p \"\$pkgdir/usr/lib/kvmd\"
+		local _platform=\"\$pkgdir/usr/lib/kvmd/platform\"
 		rm -f \"\$_platform\"
 		echo PIKVM_MODEL=$_base > \"\$_platform\"
 		echo PIKVM_VIDEO=$_video >> \"\$_platform\"

@@ -21,7 +21,6 @@
 
 
 import asyncio
-import functools
 
 from typing import Callable
 from typing import Any
@@ -88,7 +87,7 @@ class Plugin(BaseUserGpioDriver):  # pylint: disable=too-many-instance-attribute
             "host":         Option("",   type=valid_ip_or_host, if_empty=""),
             "port":         Option(5000, type=valid_port),
 
-            "device":       Option("",   type=valid_abs_path, only_if="!host", unpack_as="device_path"),
+            "device":       Option("",   type=valid_abs_path, if_empty="", unpack_as="device_path"),
             "speed":        Option(9600, type=valid_tty_speed),
 
             "timeout":      Option(5.0,  type=valid_float_f01),
@@ -98,7 +97,7 @@ class Plugin(BaseUserGpioDriver):  # pylint: disable=too-many-instance-attribute
 
     @classmethod
     def get_pin_validator(cls) -> Callable[[Any], Any]:
-        return functools.partial(valid_number, min=0, max=15, name="TESmart channel")
+        return valid_number.mk(min=0, max=15, name="TESmart channel")
 
     async def run(self) -> None:
         prev_active = -2
@@ -159,8 +158,12 @@ class Plugin(BaseUserGpioDriver):  # pylint: disable=too-many-instance-attribute
         if self.__reader is None or self.__writer is None:
             if self.__host:
                 await self.__ensure_device_net()
-            else:
+            elif self.__device_path:
                 await self.__ensure_device_serial()
+            else:
+                get_logger(0).error("Neither the host nor the serial device is selected"
+                                    " in the configuration for TESmart driver")
+                raise GpioDriverOfflineError(self)
 
     async def __ensure_device_net(self) -> None:
         try:

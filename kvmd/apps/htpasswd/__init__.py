@@ -21,9 +21,7 @@
 
 
 import sys
-import os
 import getpass
-import tempfile
 import contextlib
 import textwrap
 import argparse
@@ -37,6 +35,8 @@ from ...validators.auth import valid_user
 from ...validators.auth import valid_passwd
 
 from ...crypto import KvmdHtpasswdFile
+
+from ... import tools
 
 from .. import init
 
@@ -52,26 +52,10 @@ def _get_htpasswd_path(config: Section) -> str:
 @contextlib.contextmanager
 def _get_htpasswd_for_write(config: Section) -> Generator[KvmdHtpasswdFile, None, None]:
     path = _get_htpasswd_path(config)
-    (tmp_fd, tmp_path) = tempfile.mkstemp(
-        prefix=f".{os.path.basename(path)}.",
-        dir=os.path.dirname(path),
-    )
-    try:
-        try:
-            st = os.stat(path)
-            with open(path, "rb") as file:
-                os.write(tmp_fd, file.read())
-                os.fchown(tmp_fd, st.st_uid, st.st_gid)
-                os.fchmod(tmp_fd, st.st_mode)
-        finally:
-            os.close(tmp_fd)
+    with tools.atomic_file_edit(path) as tmp_path:
         htpasswd = KvmdHtpasswdFile(tmp_path)
         yield htpasswd
         htpasswd.save()
-        os.rename(tmp_path, path)
-    finally:
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
 
 
 def _print_invalidate_tip(prepend_nl: bool) -> None:
@@ -150,17 +134,18 @@ def _cmd_delete(config: Section, options: argparse.Namespace) -> None:
 
 
 # =====
-def main(argv: (list[str] | None)=None) -> None:
-    (parent_parser, argv, config) = init(
+def main(test_args: (list[str] | None)=None, test_override: (dict | None)=None) -> None:
+    ia = init(
         add_help=False,
         cli_logging=True,
-        argv=argv,
+        test_args=test_args,
+        test_override=test_override,
         load_auth=True,
     )
     parser = argparse.ArgumentParser(
         prog="kvmd-htpasswd",
         description="Manage KVMD users (htpasswd auth only)",
-        parents=[parent_parser],
+        parents=[ia.parser],
     )
     parser.set_defaults(cmd=(lambda *_: parser.print_help()))
     subparsers = parser.add_subparsers()
@@ -185,8 +170,8 @@ def main(argv: (list[str] | None)=None) -> None:
     sub.add_argument("-q", "--quiet", action="store_true", help="Don't show invalidation note")
     sub.set_defaults(cmd=_cmd_delete)
 
-    options = parser.parse_args(argv[1:])
+    options = parser.parse_args(ia.args)
     try:
-        options.cmd(config, options)
+        options.cmd(ia.config, options)
     except ValidatorError as ex:
         raise SystemExit(str(ex))

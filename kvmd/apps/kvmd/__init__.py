@@ -40,18 +40,17 @@ from .server import KvmdServer
 
 
 # =====
-def main(argv: (list[str] | None)=None) -> None:
+def main() -> None:
     config = init(
         prog="kvmd",
         description="The main PiKVM daemon",
-        argv=argv,
         check_run=True,
         load_auth=True,
         load_hid=True,
         load_atx=True,
         load_msd=True,
         load_gpio=True,
-    )[2]
+    ).config
 
     msd_kwargs = config.kvmd.msd._unpack(ignore=["type"])
     if config.kvmd.msd.type == "otg":
@@ -77,8 +76,9 @@ def main(argv: (list[str] | None)=None) -> None:
         auth_manager=AuthManager(
             enabled=config.auth.enabled,
             expire=config.auth.expire,
-            usc_users=config.auth.usc.users,
-            usc_groups=config.auth.usc.groups,
+            extend=config.auth.extend,
+            usc_users=(config.auth.usc.kvmd_users + config.auth.usc.users),
+            usc_groups=(config.auth.usc.kvmd_groups + config.auth.usc.groups),
             unauth_paths=([] if config.prometheus.auth.enabled else ["/export/prometheus/metrics"]),
 
             int_type=config.auth.internal.type,

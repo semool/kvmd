@@ -50,24 +50,24 @@ export function Streamer() {
 		tools.slider.setParams($("stream-quality-slider"), 5, 100, 5, 80, function(value) {
 			$("stream-quality-value").innerText = `${value}%`;
 		});
-		tools.slider.setOnUpDelayed($("stream-quality-slider"), 1000, (value) => __sendParam("quality", value));
+		$("stream-quality-slider").onchange = ((ev) => __sendParam("quality", ev.target.valueAsNumber));
 
 		tools.slider.setParams($("stream-h264-bitrate-slider"), 25, 20000, 25, 5000, function(value) {
 			$("stream-h264-bitrate-value").innerText = value;
 		});
-		tools.slider.setOnUpDelayed($("stream-h264-bitrate-slider"), 1000, (value) => __sendParam("h264_bitrate", value));
+		$("stream-h264-bitrate-slider").onchange = ((ev) => __sendParam("h264_bitrate", ev.target.valueAsNumber));
 
 		tools.slider.setParams($("stream-h264-gop-slider"), 0, 60, 1, 30, function(value) {
 			$("stream-h264-gop-value").innerText = value;
 		});
-		tools.slider.setOnUpDelayed($("stream-h264-gop-slider"), 1000, (value) => __sendParam("h264_gop", value));
+		$("stream-h264-gop-slider").onchange = ((ev) => __sendParam("h264_gop", ev.target.valueAsNumber));
 
 		tools.slider.setParams($("stream-desired-fps-slider"), 0, 120, 1, 0, function(value) {
 			$("stream-desired-fps-value").innerText = (value === 0 ? "Unlimited" : value);
 		});
-		tools.slider.setOnUpDelayed($("stream-desired-fps-slider"), 1000, (value) => __sendParam("desired_fps", value));
+		$("stream-desired-fps-slider").onchange = ((ev) => __sendParam("desired_fps", ev.target.valueAsNumber));
 
-		$("stream-resolution-selector").onchange = (() => __sendParam("resolution", $("stream-resolution-selector").value));
+		$("stream-resolution-selector").onchange = ((ev) => __sendParam("resolution", ev.target.value));
 
 		tools.radio.setOnClick("stream-mode-radio", __clickModeRadio, false);
 
@@ -121,7 +121,7 @@ export function Streamer() {
 
 	var __isStreamRequired = function() {
 		return (
-			wm.isWindowVisible($("stream-window"))
+			tools.hidden.isVisible($("stream-window"))
 			&& (
 				!$("stream-suspend-switch").checked
 				|| (document.visibilityState === "visible")
@@ -139,10 +139,10 @@ export function Streamer() {
 		wm.setAspectRatio($("stream-window"), geo.width, geo.height);
 	};
 
-	self.ensureDeps = function(callback) {
+	self.ensureDeps = function(cb) {
 		JanusStreamer.ensure_janus(function(avail) {
 			__janus_imported = avail;
-			callback();
+			cb();
 		});
 	};
 
@@ -233,7 +233,7 @@ export function Streamer() {
 				tools.slider.setRange($("stream-h264-gop-slider"), l.h264_gop.min, l.h264_gop.max);
 			}
 
-			// tools.feature.setEnabled($("stream-quality"), f.quality); // Only on s.encoder.quality
+			tools.feature.setEnabled($("stream-quality"), f.quality);
 			tools.feature.setEnabled($("stream-resolution"), f.resolution);
 			tools.feature.setEnabled($("stream-h264-bitrate"), f.h264);
 			tools.feature.setEnabled($("stream-h264-gop"), f.h264);
@@ -253,27 +253,30 @@ export function Streamer() {
 			tools.radio.clickValue("stream-mode-radio", mode);
 		}
 
+		if (state.applied) {
+			let a = state.applied;
+			if (a.resolution !== undefined) {
+				let el = $("stream-resolution-selector");
+				if (!tools.selector.hasValue(el, a.resolution)) {
+					tools.selector.addOption(el, a.resolution, a.resolution);
+				}
+				el.value = a.resolution;
+			}
+			if (a.quality !== undefined) {
+				tools.slider.setValue($("stream-quality-slider"), Math.max(a.quality, 1));
+			}
+			if (a.desired_fps !== undefined) {
+				tools.slider.setValue($("stream-desired-fps-slider"), a.desired_fps);
+			}
+			if (a.h264_bitrate !== undefined) {
+				tools.slider.setValue($("stream-h264-bitrate-slider"), a.h264_bitrate);
+				tools.slider.setValue($("stream-h264-gop-slider"), a.h264_gop); // Following together with bitrate
+			}
+		}
+
 		if (state.streamer) {
 			let s = state.streamer;
 			__res = s.source.resolution;
-
-			{
-				let res = `${__res.width}x${__res.height}`;
-				let el = $("stream-resolution-selector");
-				if (!tools.selector.hasValue(el, res)) {
-					tools.selector.addOption(el, res, res);
-				}
-				el.value = res;
-			}
-			tools.slider.setValue($("stream-quality-slider"), Math.max(s.encoder.quality, 1));
-			tools.slider.setValue($("stream-desired-fps-slider"), s.source.desired_fps);
-			if (s.h264 && s.h264.bitrate) {
-				tools.slider.setValue($("stream-h264-bitrate-slider"), s.h264.bitrate);
-				tools.slider.setValue($("stream-h264-gop-slider"), s.h264.gop); // Following together with gop
-			}
-
-			tools.feature.setEnabled($("stream-quality"), (s.encoder.quality > 0));
-
 			__streamer.ensureStream(s);
 		}
 	};
@@ -316,7 +319,9 @@ export function Streamer() {
 				title += "No stream from PiKVM";
 			}
 		}
-		el_grab.innerText = el_info.innerText = title;
+		el_grab.innerText = title;
+		// Заменяем только первое вхождение, всё ок
+		el_info.innerText = title.replace(" / ", "\n");
 	};
 
 	var __resetStream = function(mode=null) {

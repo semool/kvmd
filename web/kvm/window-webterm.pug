@@ -1,11 +1,10 @@
-.window.window-resizable#webterm-window(data-show-centered style="display: flex; min-width: 720px; min-height: 480px")
+.hidden.window.window-elegant.window-resizable#webterm-window(data-wm-window-show-centered style="display: flex; min-width: 720px; min-height: 480px")
 	.window-header
 		.window-grab Terminal
 		.window-buttons
-			button.window-button-original &bull;
-			button.window-button-maximize &#9744;
-			button.window-button-close #[b &times;]
-			// Терминал глючит из-за зажимаемой клавиши ESC для выхода
-			// button(class="window-button-full-screen") &#10530;
+			button(data-wm-window-set-original)
+			button(data-wm-window-set-maximized)
+			button(data-wm-window-close)
+			// Без фуллскрина, так как терминал глючит из-за зажимаемой клавиши ESC для выхода
 
 	iframe#webterm-iframe(src="" style="width: 100%; flex: 1")

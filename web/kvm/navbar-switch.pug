@@ -1,10 +1,10 @@
 li.right.feature-disabled#switch-dropdown
-	a.menu-button#switch-menu-button(href="#")
+	.menu-item.menu-button#switch-menu-button(href="#")
 		+navbar_led("switch-atx-power-led", "led-atx-power")
 		+navbar_led("switch-atx-hdd-led", "led-atx-hdd")
 		span Switch #[i #[sub#switch-active-port]]
 
-	.menu#switch-menu
+	.hidden.menu#switch-menu
 		table(style="border-spacing: 0px")
 			tr
 				td
@@ -13,7 +13,7 @@ li.right.feature-disabled#switch-dropdown
 						sub Select a port or perform any available action like ATX click
 				td
 					.text
-						button.small(data-force-hide-menu data-show-window="switch-window") &bull; Settings
+						button.small(data-wm-menu-force-hide data-wm-window-show="switch-window") &bull; Settings
 		hr
 
 		.hidden#switch-message-update

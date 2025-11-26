@@ -304,10 +304,13 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
                     logger.exception("Cleanup error on %s", sub.name)
         logger.info("On-Cleanup complete")
 
-    async def _on_ws_opened(self, _: WsSession) -> None:
+    def _on_ws_added(self, ws: WsSession) -> None:
+        self.__auth_manager.start_ws_session(ws.token)
+        self.__hid.clear_events()
         self.__streamer_notifier.notify()
 
-    async def _on_ws_closed(self, _: WsSession) -> None:
+    def _on_ws_removed(self, ws: WsSession) -> None:
+        self.__auth_manager.stop_ws_session(ws.token)
         self.__hid.clear_events()
         self.__streamer_notifier.notify()
 
@@ -322,8 +325,11 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
     async def __stream_controller(self) -> None:
         prev = False
         while True:
+            clients = self.__get_stream_clients()
+            await self._broadcast_ws_event(self.__EV_CLIENTS_STATE, {"count": clients})  # FIXME
+
             cur = (
-                bool(self.__get_stream_clients())
+                bool(clients)
                 or self.__snapshoter.snapshoting()
                 or self.__stream_forever
             )
@@ -331,8 +337,11 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
                 await self.__streamer.ensure_start()
             elif prev and not cur:
                 await self.__streamer.ensure_stop()
+            prev = cur
 
             if self.__new_streamer_params:
+                if (await self.__streamer_notifier.wait(timeout=1)) >= 0:
+                    continue
                 self.__streamer.set_params(self.__new_streamer_params)
                 self.__new_streamer_params = {}
                 self.__reset_streamer = True
@@ -341,13 +350,11 @@ class KvmdServer(HttpServer):  # pylint: disable=too-many-arguments,too-many-ins
                 await self.__streamer.ensure_restart()
                 self.__reset_streamer = False
 
-            prev = cur
-            await self._broadcast_ws_event(self.__EV_CLIENTS_STATE, {"count": self.__get_stream_clients()})  # FIXME
             await self.__streamer_notifier.wait()
 
     async def __stream_snapshoter(self) -> None:
         await self.__snapshoter.run(
-            is_live=(lambda: bool(self.__get_stream_clients)),
+            is_live=(lambda: bool(self.__get_stream_clients())),
             notifier=self.__streamer_notifier,
         )
 

@@ -3,22 +3,31 @@
 TESTENV_IMAGE ?= kvmd-testenv
 TESTENV_HID ?= /dev/ttyS10
 TESTENV_VIDEO ?= /dev/video0
-TESTENV_GPIO ?= /dev/gpiochip0
 TESTENV_RELAY ?=
-#TESTENV_RELAY ?= $(if $(shell ls /dev/hidraw0 2>/dev/null || true),/dev/hidraw0,)
+# TESTENV_RELAY ?= $(if $(shell ls /dev/hidraw0 2>/dev/null || true),/dev/hidraw0,)
 
-LIBGPIOD_VERSION ?= 1.6.3
+TESTENV_GPIO_MODULE = /sys/module/gpio_mockup
+TESTENV_GPIO = /dev/$(call -basename,$(call -dirname,$(wildcard $(TESTENV_GPIO_MODULE)/drivers/*/*/*/dev)))
 
 USTREAMER_MIN_VERSION ?= $(shell grep -o 'ustreamer>=[^"]\+' PKGBUILD | sed 's/ustreamer>=//g')
 
 DEFAULT_PLATFORM ?= v2-hdmi-rpi4
 
 DOCKER ?= docker
+DOCKER_BUILD ?= build
 
 
 # =====
-define optbool
+define -optbool
 $(filter $(shell echo $(1) | tr A-Z a-z),yes on 1)
+endef
+
+define -dirname
+$(patsubst %/,%,$(dir $(1)))
+endef
+
+define -basename
+$(notdir $(patsubst %/,%,$(1)))
 endef
 
 
@@ -48,8 +57,8 @@ all:
 
 
 testenv:
-	$(DOCKER) build \
-			$(if $(call optbool,$(NC)),--no-cache,) \
+	$(DOCKER) $(DOCKER_BUILD) \
+			$(if $(call -optbool,$(NC)),--no-cache,) \
 			--rm \
 			--tag $(TESTENV_IMAGE) \
 			--build-arg LIBGPIOD_VERSION=$(LIBGPIOD_VERSION) \
@@ -83,26 +92,29 @@ tox: testenv
 		-t $(TESTENV_IMAGE) bash -c " \
 			cp -a /src/testenv/.ssl/nginx /etc/kvmd/nginx/ssl \
 			&& cp -a /src/testenv/.ssl/vnc /etc/kvmd/vnc/ssl \
-			&& cp /src/testenv/platform /usr/share/kvmd \
+			&& cp /src/testenv/platform /usr/lib/kvmd \
 			&& cp /usr/share/kvmd/configs.default/kvmd/*.yaml /etc/kvmd \
 			&& cp /usr/share/kvmd/configs.default/kvmd/*passwd /etc/kvmd \
 			&& cp /usr/share/kvmd/configs.default/kvmd/*.secret /etc/kvmd \
 			&& cp /usr/share/kvmd/configs.default/kvmd/edid/v2.hex /etc/kvmd/switch-edid.hex \
-			&& cp /usr/share/kvmd/configs.default/kvmd/main/$(if $(P),$(P),$(DEFAULT_PLATFORM)).yaml /etc/kvmd/main.yaml \
-			&& mkdir -p /etc/kvmd/override.d \
-			&& cp /src/testenv/$(if $(P),$(P),$(DEFAULT_PLATFORM)).override.yaml /etc/kvmd/override.yaml \
+			&& cp /usr/share/kvmd/configs.default/kvmd/main/$(if $(P),$(P),$(DEFAULT_PLATFORM)).yaml /usr/lib/kvmd/main.yaml \
+			&& cp -r /src/testenv/override.d -T /etc/kvmd/override.d \
+			&& cp /src/testenv/$(if $(P),$(P),$(DEFAULT_PLATFORM)).override.yaml /etc/kvmd/override.d/01-platform.yaml \
+			&& cp /usr/share/kvmd/configs.default/kvmd/override.yaml -T /etc/kvmd/override.yaml \
 			&& cd /src \
 			&& $(if $(CMD),$(CMD),tox -q -c testenv/tox.ini $(if $(E),-e $(E),-p auto)) \
 		"
 
 
-$(TESTENV_GPIO):
-	test ! -e $(TESTENV_GPIO)
+$(TESTENV_GPIO_MODULE):
 	sudo modprobe gpio_mockup gpio_mockup_ranges=0,40
-	test -c $(TESTENV_GPIO)
+
+gpio: $(TESTENV_GPIO_MODULE)
+	test -c "$(TESTENV_GPIO)"
 
 
-run: testenv $(TESTENV_GPIO)
+.NOTPARALLEL: run
+run: testenv gpio
 	- $(DOCKER) run --rm --name kvmd \
 			--ipc=shareable \
 			--privileged \
@@ -122,20 +134,21 @@ run: testenv $(TESTENV_GPIO)
 		-it $(TESTENV_IMAGE) /bin/bash -c " \
 			mkdir -p /tmp/kvmd-nginx \
 			&& mount -t debugfs none /sys/kernel/debug \
-			&& test -d /sys/kernel/debug/gpio-mockup/`basename $(TESTENV_GPIO)`/ || (echo \"Missing GPIO mockup\" && exit 1) \
+			&& test -d /sys/kernel/debug/gpio-mockup/$(call -basename,$(TESTENV_GPIO))/ || (echo \"Missing GPIO mockup\" && exit 1) \
 			&& (socat PTY,link=$(TESTENV_HID) PTY,link=/dev/ttyS11 &) \
 			&& cp -r /usr/share/kvmd/configs.default/nginx/* /etc/kvmd/nginx \
 			&& cp -a /testenv/.ssl/nginx /etc/kvmd/nginx/ssl \
 			&& cp -a /testenv/.ssl/vnc /etc/kvmd/vnc/ssl \
-			&& cp /testenv/platform /usr/share/kvmd \
+			&& cp /testenv/platform /usr/lib/kvmd \
 			&& cp /usr/share/kvmd/configs.default/kvmd/*.yaml /etc/kvmd \
 			&& cp /usr/share/kvmd/configs.default/kvmd/*passwd /etc/kvmd \
 			&& cp /usr/share/kvmd/configs.default/kvmd/*.secret /etc/kvmd \
 			&& cp /usr/share/kvmd/configs.default/kvmd/edid/v2.hex /etc/kvmd/switch-edid.hex \
-			&& cp /usr/share/kvmd/configs.default/kvmd/main/$(if $(P),$(P),$(DEFAULT_PLATFORM)).yaml /etc/kvmd/main.yaml \
+			&& cp /usr/share/kvmd/configs.default/kvmd/main/$(if $(P),$(P),$(DEFAULT_PLATFORM)).yaml /usr/lib/kvmd/main.yaml \
 			&& ln -s /testenv/web.css /etc/kvmd/web.css \
-			&& mkdir -p /etc/kvmd/override.d \
-			&& cp /testenv/$(if $(P),$(P),$(DEFAULT_PLATFORM)).override.yaml /etc/kvmd/override.yaml \
+			&& cp -r /testenv/override.d -T /etc/kvmd/override.d \
+			&& cp /testenv/$(if $(P),$(P),$(DEFAULT_PLATFORM)).override.yaml /etc/kvmd/override.d/01-platform.yaml \
+			&& cp /usr/share/kvmd/configs.default/kvmd/override.yaml -T /etc/kvmd/override.yaml \
 			&& python -m kvmd.apps.ngxmkconf /etc/kvmd/nginx/nginx.conf.mako /etc/kvmd/nginx/nginx.conf \
 			&& nginx -c /etc/kvmd/nginx/nginx.conf -g 'user http; error_log stderr;' \
 			&& ln -s $(TESTENV_VIDEO) /dev/kvmd-video \
@@ -144,27 +157,9 @@ run: testenv $(TESTENV_GPIO)
 		"
 
 
-run-cfg: testenv
-	- $(DOCKER) run --rm --name kvmd-cfg \
-			--volume `pwd`/testenv/run:/run/kvmd:rw \
-			--volume `pwd`/testenv:/testenv:ro \
-			--volume `pwd`/kvmd:/kvmd:ro \
-			--volume `pwd`/extras:/usr/share/kvmd/extras:ro \
-			--volume `pwd`/configs:/usr/share/kvmd/configs.default:ro \
-			--volume `pwd`/contrib/keymaps:/usr/share/kvmd/keymaps:ro \
-		-it $(TESTENV_IMAGE) /bin/bash -c " \
-			cp -a /testenv/.ssl/nginx /etc/kvmd/nginx/ssl \
-			&& cp -a /testenv/.ssl/vnc /etc/kvmd/vnc/ssl \
-			&& cp /testenv/platform /usr/share/kvmd \
-			&& cp /usr/share/kvmd/configs.default/kvmd/*.yaml /etc/kvmd \
-			&& cp /usr/share/kvmd/configs.default/kvmd/*passwd /etc/kvmd \
-			&& cp /usr/share/kvmd/configs.default/kvmd/*.secret /etc/kvmd \
-			&& cp /usr/share/kvmd/configs.default/kvmd/edid/v2.hex /etc/kvmd/switch-edid.hex \
-			&& cp /usr/share/kvmd/configs.default/kvmd/main/$(if $(P),$(P),$(DEFAULT_PLATFORM)).yaml /etc/kvmd/main.yaml \
-			&& mkdir -p /etc/kvmd/override.d \
-			&& cp /testenv/$(if $(P),$(P),$(DEFAULT_PLATFORM)).override.yaml /etc/kvmd/override.yaml \
-			&& $(if $(CMD),$(CMD),python -m kvmd.apps.kvmd -m) \
-		"
+.NOTPARALLEL: shell
+shell: testenv gpio
+	$(MAKE) run CMD=bash
 
 
 run-ipmi: testenv
@@ -179,14 +174,15 @@ run-ipmi: testenv
 		-it $(TESTENV_IMAGE) /bin/bash -c " \
 			cp -a /testenv/.ssl/nginx /etc/kvmd/nginx/ssl \
 			&& cp -a /testenv/.ssl/vnc /etc/kvmd/vnc/ssl \
-			&& cp /testenv/platform /usr/share/kvmd \
+			&& cp /testenv/platform /usr/lib/kvmd \
 			&& cp /usr/share/kvmd/configs.default/kvmd/*.yaml /etc/kvmd \
 			&& cp /usr/share/kvmd/configs.default/kvmd/*passwd /etc/kvmd \
 			&& cp /usr/share/kvmd/configs.default/kvmd/*.secret /etc/kvmd \
 			&& cp /usr/share/kvmd/configs.default/kvmd/edid/v2.hex /etc/kvmd/switch-edid.hex \
-			&& cp /usr/share/kvmd/configs.default/kvmd/main/$(if $(P),$(P),$(DEFAULT_PLATFORM)).yaml /etc/kvmd/main.yaml \
-			&& mkdir -p /etc/kvmd/override.d \
-			&& cp /testenv/$(if $(P),$(P),$(DEFAULT_PLATFORM)).override.yaml /etc/kvmd/override.yaml \
+			&& cp /usr/share/kvmd/configs.default/kvmd/main/$(if $(P),$(P),$(DEFAULT_PLATFORM)).yaml /usr/lib/kvmd/main.yaml \
+			&& cp -r /testenv/override.d -T /etc/kvmd/override.d \
+			&& cp /testenv/$(if $(P),$(P),$(DEFAULT_PLATFORM)).override.yaml /etc/kvmd/override.d/01-platform.yaml \
+			&& cp /usr/share/kvmd/configs.default/kvmd/override.yaml -T /etc/kvmd/override.yaml \
 			&& $(if $(CMD),$(CMD),python -m kvmd.apps.ipmi --run) \
 		"
 
@@ -204,14 +200,15 @@ run-vnc: testenv
 		-it $(TESTENV_IMAGE) /bin/bash -c " \
 			cp -a /testenv/.ssl/nginx /etc/kvmd/nginx/ssl \
 			&& cp -a /testenv/.ssl/vnc /etc/kvmd/vnc/ssl \
-			&& cp /testenv/platform /usr/share/kvmd \
+			&& cp /testenv/platform /usr/lib/kvmd \
 			&& cp /usr/share/kvmd/configs.default/kvmd/*.yaml /etc/kvmd \
 			&& cp /usr/share/kvmd/configs.default/kvmd/*passwd /etc/kvmd \
 			&& cp /usr/share/kvmd/configs.default/kvmd/*.secret /etc/kvmd \
 			&& cp /usr/share/kvmd/configs.default/kvmd/edid/v2.hex /etc/kvmd/switch-edid.hex \
-			&& cp /usr/share/kvmd/configs.default/kvmd/main/$(if $(P),$(P),$(DEFAULT_PLATFORM)).yaml /etc/kvmd/main.yaml \
-			&& mkdir -p /etc/kvmd/override.d \
-			&& cp /testenv/$(if $(P),$(P),$(DEFAULT_PLATFORM)).override.yaml /etc/kvmd/override.yaml \
+			&& cp /usr/share/kvmd/configs.default/kvmd/main/$(if $(P),$(P),$(DEFAULT_PLATFORM)).yaml /usr/lib/kvmd/main.yaml \
+			&& cp -r /testenv/override.d -T /etc/kvmd/override.d \
+			&& cp /testenv/$(if $(P),$(P),$(DEFAULT_PLATFORM)).override.yaml /etc/kvmd/override.d/01-platform.yaml \
+			&& cp /usr/share/kvmd/configs.default/kvmd/override.yaml -T /etc/kvmd/override.yaml \
 			&& $(if $(CMD),$(CMD),python -m kvmd.apps.vnc --run) \
 		"
 

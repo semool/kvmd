@@ -1,28 +1,28 @@
 li.right#system-dropdown
-	a.menu-button(href="#")
+	.menu-item.menu-button(href="#")
 		+navbar_led("link-led", "led-link")
 		+navbar_led("stream-led", "led-video")
 		+navbar_led("hid-keyboard-led", "led-hid-keyboard")
 		+navbar_led("hid-mouse-led", "led-hid-mouse")
 		span System
 
-	.menu#system-menu
+	.hidden.menu#system-menu
 		table.kv
 			tr
 				td.value
 					| Runtime settings &amp; tools
 				td.feature-disabled#system-tool-webterm
-					button.small(data-force-hide-menu data-show-window="webterm-window") &bull; Term
+					button.small(data-wm-menu-force-hide data-wm-window-show="webterm-window") &bull; Term
 				td#system-tool-about
-					button.small(data-force-hide-menu data-show-window="about-window") &bull; About
+					button.small(data-wm-menu-force-hide data-wm-window-show="about-window") &bull; About
 				td#system-tool-log
-					button.small#open-log-button(data-force-hide-menu) &bull; Log
+					button.small#open-log-button(data-wm-menu-force-hide) &bull; Log
 				td.feature-disabled#system-tool-wol
 					button(
-						data-force-hide-menu
+						data-wm-menu-force-hide
 						class="__gpio-button-__wol__ __gpio-button small"
-						data-channel="__wol__"
-						data-confirm="Are you sure to send Wake-on-LAN packet to the server?"
+						data-gpio-channel="__wol__"
+						data-gpio-confirm="Are you sure to send Wake-on-LAN packet to the server?"
 					) &bull; WoL
 		hr
 
@@ -68,8 +68,8 @@ li.right#system-dropdown
 		hr
 
 		.buttons.buttons-row
-			button.row33(data-force-hide-menu data-show-window="stream-window") &bull; Show stream
-			button.row33#stream-screenshot-button(data-force-hide-menu) &bull; Screenshot
+			button.row33(data-wm-menu-force-hide data-wm-window-show="stream-window") &bull; Show stream
+			button.row33#stream-screenshot-button(data-wm-menu-force-hide) &bull; Screenshot
 			button.row33#stream-reset-button Reset stream
 		hr
 
@@ -80,6 +80,9 @@ li.right#system-dropdown
 			tr.feature-disabled#hid-outputs-mouse
 				td #[a(target="_blank" href="https://docs.pikvm.org/mouse") Mouse mode]:
 				td #[div.radio-box#hid-outputs-mouse-box]
+			tr
+				td #[a(target="_blank" href="https://docs.pikvm.org/shortcuts") Shortcuts magic]:
+				td #[select#hid-keyboard-magic-selector]
 
 		+menu_spoiler("Keyboard &amp; mouse (HID) settings")
 			+menu_switch_table("hid-keyboard-swap-cc-switch", true, false) Swap Left Ctrl and Caps keys:
@@ -96,9 +99,9 @@ li.right#system-dropdown
 					td
 						table
 							tr
-								+menu_switch_td2("hid-mouse-reverse-scrolling-switch", true, false) Y:
+								+menu_switch_td2("hid-mouse-reverse-scrolling-y-switch", true, false) Y:
 								td &nbsp;&nbsp;
-								+menu_switch_td2("hid-mouse-reverse-panning-switch", true, false) X:
+								+menu_switch_td2("hid-mouse-reverse-scrolling-x-switch", true, false) X:
 				tr
 					+menu_switch_td2("hid-mouse-cumulative-scrolling-switch", true, false) Cumulative scrolling:
 				tr
@@ -112,8 +115,6 @@ li.right#system-dropdown
 					+menu_switch_td2("page-close-ask-switch", true, true) Ask page close confirmation:
 				tr
 					+menu_switch_td2("page-full-tab-stream-switch", true, false) Expand for the entire tab by default:
-				tr
-					+menu_switch_td2("page-full-screen-frame-switch", true, false) Show the blue frame at full screen:
 				tr
 					+menu_switch_td2("stream-suspend-switch", true, false) Suspend stream when tab is not active:
 
@@ -137,5 +138,6 @@ li.right#system-dropdown
 		hr
 
 		.buttons.buttons-row
-			button.row50(data-force-hide-menu data-show-window="keyboard-window") &bull; Show keyboard
-			button.row50#hid-reset-button(disabled) Reset HID
+			button.row33(data-wm-menu-force-hide data-wm-window-show="keyboard-window") &bull; Keyboard
+			button.row33(data-wm-menu-force-hide data-wm-window-show="mouse-window") &bull; Mouse
+			button.row33#hid-reset-button(disabled) Reset HID

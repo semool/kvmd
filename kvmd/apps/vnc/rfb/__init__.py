@@ -75,7 +75,6 @@ class RfbClient(RfbClientStream):  # pylint: disable=too-many-instance-attribute
         width: int,
         height: int,
         name: str,
-        symmap: dict[int, dict[int, int]],
         scroll_rate: int,
 
         vncpasses: set[str],
@@ -94,11 +93,12 @@ class RfbClient(RfbClientStream):  # pylint: disable=too-many-instance-attribute
         self._height = height
         self.__name = name
         self.__scroll_rate = scroll_rate
-        self.__symmap = symmap
 
         self.__vncpasses = vncpasses
         self.__vencrypt = vencrypt
         self.__none_auth_only = none_auth_only
+
+        self.__symmap: (dict[int, dict[int, int]] | None) = None
 
         self.__rfb_version = 0
         self._encodings = RfbClientEncodings(frozenset())
@@ -113,7 +113,7 @@ class RfbClient(RfbClientStream):  # pylint: disable=too-many-instance-attribute
 
         # Эти состояния шарить не обязательно - бекенд исключает дублирующиеся события.
         # Все это нужно только чтобы не посылать лишние события в сокет KVMD
-        self.__modifiers = 0
+        self.__mods = 0
         self.__mouse_buttons: dict[int, bool] = {}
         self.__mouse_move = (-1, -1, -1, -1)  # (width, height, X, Y)
 
@@ -190,6 +190,16 @@ class RfbClient(RfbClientStream):  # pylint: disable=too-many-instance-attribute
 
     async def _on_set_encodings(self) -> None:
         raise NotImplementedError
+
+    # =====
+
+    async def _load_symmap_cache(self) -> dict[int, dict[int, int]]:
+        raise NotImplementedError
+
+    async def __get_symmap(self) -> dict[int, dict[int, int]]:
+        if self.__symmap is None:
+            self.__symmap = await self._load_symmap_cache()
+        return self.__symmap
 
     # =====
 
@@ -493,6 +503,8 @@ class RfbClient(RfbClientStream):  # pylint: disable=too-many-instance-attribute
 
         if self._encodings.has_ext_keys:  # Preferred method
             await self._write_fb_update("ExtKeys FBUR", 0, 0, RfbEncodings.EXT_KEYS, drain=True)
+        else:  # Load symmap for regular key events
+            await self.__get_symmap()
 
         if self._encodings.has_ext_mouse:  # Preferred too
             await self._write_fb_update("ExtMouse FBUR", 0, 0, RfbEncodings.EXT_MOUSE, drain=True)
@@ -517,19 +529,19 @@ class RfbClient(RfbClientStream):  # pylint: disable=too-many-instance-attribute
         (state, code) = await self._read_struct("key event", "? xx L")
         state = bool(state)
 
-        is_modifier = self.__switch_modifiers_x11(code, state)
-        variants = self.__symmap.get(code)
+        is_mod = self.__switch_modifiers_x11(code, state)
+        variants = (await self.__get_symmap()).get(code)
         fake_shift = False
 
         if variants:
-            if is_modifier:
+            if is_mod:
                 key = variants.get(0)
             else:
-                key = variants.get(self.__modifiers)
+                key = variants.get(self.__mods)
                 if key is None:
                     key = variants.get(0)
 
-                if key is None and self.__modifiers == 0 and SymmapModifiers.SHIFT in variants:
+                if key is None and self.__mods == 0 and SymmapModifiers.SHIFT in variants:
                     # JUMP doesn't send shift events:
                     #   - https://github.com/pikvm/pikvm/issues/820
                     key = variants[SymmapModifiers.SHIFT]
@@ -553,9 +565,9 @@ class RfbClient(RfbClientStream):  # pylint: disable=too-many-instance-attribute
         if mod == 0:
             return False
         if state:
-            self.__modifiers |= mod
+            self.__mods |= mod
         else:
-            self.__modifiers &= ~mod
+            self.__mods &= ~mod
         return True
 
     def __switch_modifiers_evdev(self, key: int, state: bool) -> bool:
@@ -569,9 +581,9 @@ class RfbClient(RfbClientStream):  # pylint: disable=too-many-instance-attribute
         if mod == 0:
             return False
         if state:
-            self.__modifiers |= mod
+            self.__mods |= mod
         else:
-            self.__modifiers &= ~mod
+            self.__mods &= ~mod
         return True
 
     async def __handle_pointer_event(self) -> None:

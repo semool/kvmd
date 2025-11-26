@@ -129,17 +129,16 @@ async def _run_cmd(cmd: list[str], unix_path: str) -> None:
 
 
 # =====
-def main(argv: (list[str] | None)=None) -> None:
-    (parent_parser, argv, config) = init(
+def main() -> None:
+    ia = init(
         add_help=False,
         cli_logging=True,
-        argv=argv,
     )
     parser = argparse.ArgumentParser(
         prog="kvmd-pstrun",
         description="Request the access to KVMD persistent storage and run the script",
-        parents=[parent_parser],
+        parents=[ia.parser],
     )
     parser.add_argument("cmd", nargs="+", help="Script with arguments to run")
-    options = parser.parse_args(argv[1:])
-    aiotools.run(_run_cmd(options.cmd, config.pst.server.unix))
+    options = parser.parse_args(ia.args)
+    aiotools.run(_run_cmd(options.cmd, ia.config.pst.server.unix))

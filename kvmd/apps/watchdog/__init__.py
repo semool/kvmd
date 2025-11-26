@@ -101,12 +101,12 @@ def _cmd_cancel(config: Section) -> None:
 
 
 # =====
-def main(argv: (list[str] | None)=None) -> None:
-    (parent_parser, argv, config) = init(add_help=False, argv=argv)
+def main() -> None:
+    ia = init(add_help=False)
     parser = argparse.ArgumentParser(
         prog="kvmd-watchdog",
         description="RTC-based hardware watchdog",
-        parents=[parent_parser],
+        parents=[ia.parser],
     )
     parser.set_defaults(cmd=(lambda *_: parser.print_help()))
     subparsers = parser.add_subparsers()
@@ -117,5 +117,5 @@ def main(argv: (list[str] | None)=None) -> None:
     cmd_cancel_parser = subparsers.add_parser("cancel", help="Cancel armed timeout")
     cmd_cancel_parser.set_defaults(cmd=_cmd_cancel)
 
-    options = parser.parse_args(argv[1:])
-    options.cmd(config.watchdog)
+    options = parser.parse_args(ia.args)
+    options.cmd(ia.config.watchdog)

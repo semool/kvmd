@@ -59,7 +59,7 @@ def _cmd_show(config: Section, options: argparse.Namespace) -> None:
     if len(secret) == 0:
         raise SystemExit("Error: TOTP secret is not configured")
     uri = pyotp.totp.TOTP(secret).provisioning_uri(
-        name=(options.name or socket.getfqdn()),
+        name=(options.name or socket.gethostname()),
         issuer_name="PiKVM",
     )
     qr = qrcode.QRCode()
@@ -77,16 +77,15 @@ def _cmd_delete(config: Section, _: argparse.Namespace) -> None:
 
 
 # =====
-def main(argv: (list[str] | None)=None) -> None:
-    (parent_parser, argv, config) = init(
+def main() -> None:
+    ia = init(
         add_help=False,
         cli_logging=True,
-        argv=argv,
     )
     parser = argparse.ArgumentParser(
         prog="kvmd-totp",
         description="Manage KVMD TOTP secret",
-        parents=[parent_parser],
+        parents=[ia.parser],
     )
     parser.set_defaults(cmd=(lambda *_: parser.print_help()))
     subparsers = parser.add_subparsers()
@@ -103,5 +102,5 @@ def main(argv: (list[str] | None)=None) -> None:
     cmd_delete_parser = subparsers.add_parser("del", help="Remove TOTP secret and disable 2FA auth")
     cmd_delete_parser.set_defaults(cmd=_cmd_delete)
 
-    options = parser.parse_args(argv[1:])
-    options.cmd(config, options)
+    options = parser.parse_args(ia.args)
+    options.cmd(ia.config, options)

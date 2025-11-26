@@ -6,14 +6,14 @@ mixin spacer(sp)
 
 
 mixin key(sp, code, classes="", width=0)
-	div(data-code=code, class=`key ${classes}`, style=(width ? `width: ${width}px` : ""))
+	div(data-keypad-code=code, class=`key ${classes}`, style=(width ? `width: ${width}px` : ""))
 		.label
 			block
 	+spacer(sp)
 
 
 mixin modifier(sp, code, classes="", width=0)
-	div(data-code=code, data-allow-autohold, class=`key ${classes}`, style=(width ? `width: ${width}px` : ""))
+	div(data-keypad-code=code, data-keypad-allow-autohold, class=`key ${classes}`, style=(width ? `width: ${width}px` : ""))
 		.label
 			| #[b &bull;]#[br]
 			block
@@ -30,12 +30,12 @@ mixin lamp(cls)
 	img(class=`inline-lamp-small ${cls} led-gray` src=`${svg_dir}/led-square.svg`)
 
 
-.window#keyboard-window(data-show-centered)
+.hidden.window#keyboard-window(data-wm-window-show-centered)
 	.window-header#keyboard-window-header
-		.window-grab Virtual Keyboard
+		.window-grab Keyboard
 		.window-buttons
-			button.window-button-original &bull;
-			button.window-button-close #[b &times;]
+			button(data-wm-window-set-original)
+			button(data-wm-window-close)
 
 	.keypad#keyboard-desktop(align="center")
 		.keypad-block

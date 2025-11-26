@@ -21,7 +21,22 @@
 
 
 import socket
+import dataclasses
 import errno
+
+import netifaces
+
+
+# =====
+class NoIfacesError(Exception):
+    pass
+
+
+# =====
+@dataclasses.dataclass(frozen=True)
+class FirstIface:
+    name: str
+    ip:   str
 
 
 # =====
@@ -46,3 +61,22 @@ def get_listen_host(host: str) -> str:
     if len(host) == 0:
         return ("::" if is_ipv6_enabled() else "0.0.0.0")
     return host
+
+
+def get_first_iface() -> FirstIface:
+    gws = netifaces.gateways()
+    if "default" in gws:
+        for proto in [socket.AF_INET, socket.AF_INET6]:
+            if proto in gws["default"]:
+                iface = gws["default"][proto][1]
+                addrs = netifaces.ifaddresses(iface)
+                return FirstIface(iface, addrs[proto][0]["addr"])
+
+    for iface in netifaces.interfaces():
+        if not iface.startswith(("lo", "docker")):
+            addrs = netifaces.ifaddresses(iface)
+            for proto in [socket.AF_INET, socket.AF_INET6]:
+                if proto in addrs:
+                    return FirstIface(iface, addrs[proto][0]["addr"])
+
+    raise NoIfacesError()

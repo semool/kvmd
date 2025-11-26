@@ -113,7 +113,7 @@ export function Switch() {
 				+ color.green.toString(16).padStart(2, "0")
 				+ color.blue.toString(16).padStart(2, "0")
 			);
-			$(`switch-color-${role}-brightness-slider`).value = color.brightness;
+			tools.slider.setValue($(`switch-color-${role}-brightness-slider`), color.brightness);
 		}
 		__state.colors = colors;
 	};
@@ -122,7 +122,7 @@ export function Switch() {
 		let el_color = $(`switch-color-${role}-input`);
 		let el_brightness = $(`switch-color-${role}-brightness-slider`);
 		let color = __state.colors[role];
-		let brightness = parseInt(el_brightness.value);
+		let brightness = el_brightness.valueAsNumber;
 		let rgbx = (
 			el_color.value.slice(1)
 			+ ":" + brightness.toString(16).padStart(2, "0")
@@ -135,7 +135,7 @@ export function Switch() {
 				+ color.green.toString(16).padStart(2, "0")
 				+ color.blue.toString(16).padStart(2, "0")
 			);
-			el_brightness.value = color.brightness;
+			tools.slider.setValue(el_brightness, color.brightness);
 		});
 	};
 
@@ -305,11 +305,21 @@ export function Switch() {
 	var __applySummary = function(summary) {
 		let active = summary.active_port;
 		if (!__state.summary || __state.summary.active_port !== active) {
+			let caption = "";
 			if (active < 0 || active >= __state.model.ports.length) {
-				$("switch-active-port").innerText = "N/A";
+				caption = "N/A";
 			} else {
-				$("switch-active-port").innerText = "p" + summary.active_id;
+				caption = "p" + summary.active_id;
+				let pa = __state.model.ports[summary.active_port];
+				if (pa && pa.name.length > 0) {
+					let name = pa.name;
+					if (name.length > 8) {
+						name = name.slice(0, 8) + "~";
+					}
+					caption += " " + name;
+				}
 			}
+			$("switch-active-port").innerText = caption;
 			for (let port = 0; port < __state.model.ports.length; ++port) {
 				__setLedState($(`__switch-port-led-p${port}`), "green", (port === active));
 			}
@@ -545,7 +555,7 @@ export function Switch() {
 					params["dummy"] = $("__switch-port-dummy-switch").checked;
 				}
 				for (let action of Object.keys(atx_actions)) {
-					params[`atx_click_${action}_delay`] = tools.slider.getValue($(`__switch-port-atx-click-${action}-delay-slider`));
+					params[`atx_click_${action}_delay`] = $(`__switch-port-atx-click-${action}-delay-slider`).valueAsNumber;
 				};
 				__sendPost("api/switch/set_port_params", params);
 			}
@@ -619,11 +629,11 @@ export function Switch() {
 		}
 	};
 
-	var __sendPost = function(url, params, error_callback=null) {
+	var __sendPost = function(url, params, error_cb=null) {
 		tools.httpPost(url, params, function(http) {
 			if (http.status !== 200) {
-				if (error_callback) {
-					error_callback();
+				if (error_cb) {
+					error_cb();
 				}
 				wm.error("Switch error", http.responseText);
 			}
