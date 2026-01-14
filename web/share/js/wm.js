@@ -89,31 +89,7 @@ function __WindowManager() {
 			for (let el of el_win.querySelectorAll("[data-wm-window-set-full-screen]")) {
 				el.innerHTML = "&#10530;";
 				el.title = "Go to full-screen mode";
-				tools.el.setOnClick(el, function() {
-					if (document.documentElement.requestFullscreen && !$$("window-full-tab").length) {
-						document.documentElement.requestFullscreen().then(function() {
-							self.setFullTabWindow(el_win, true);
-							__activateWindow(el_win); // Почему-то теряется фокус
-							if (navigator.keyboard && navigator.keyboard.lock) {
-								navigator.keyboard.lock();
-							} else {
-								setTimeout(function() {
-									let html = (
-										"Shortcuts like Alt+Tab and Ctrl+W might not be captured.<br>"
-										+ "For best keyboard handling use any browser with<br><a target=\"_blank\""
-										+ " href=\"https://developer.mozilla.org/en-US/docs/Web"
-										+ "/API/Keyboard_API#Browser_compatibility\">keyboard lock support from this list</a>.<br><br>"
-										+ "In Chrome use HTTPS and enable <i>system-keyboard-lock</i><br>"
-										+ "by putting at URL <i>chrome://flags/#system-keyboard-lock</i>.<br><br>"
-										+ "Also you can use <a target=\"_blank\" href=\"https://docs.pikvm.org/shortcuts/\">"
-										+ " PiKVM Shortcuts Composer</a>."
-									);
-									self.modal("The Keyboard Lock API is not supported", html, true, false, "full-screen");
-								}, 150); // Avoid ResizeObserver() hack
-							}
-						});
-					}
-				});
+				tools.el.setOnClick(el, () => __goFullScreenWindow(el_win));
 			}
 		}
 
@@ -257,10 +233,10 @@ function __WindowManager() {
 		inner += "<div class=\"modal-buttons buttons-row\">";
 		let bt_cls = ((ok && cancel) ? "row50": "row100");
 		if (cancel) {
-			inner += `<button class="modal-button-cancel ${bt_cls}">Cancel</button>`;
+			inner += `<button data-x-wm-modal-cancel class="${bt_cls}">Cancel</button>`;
 		}
 		if (ok) {
-			inner += `<button class="modal-button-ok ${bt_cls}">OK</button>`;
+			inner += `<button data-x-wm-modal-ok class="${bt_cls}">OK</button>`;
 		}
 		inner += "</div></div>";
 
@@ -270,8 +246,8 @@ function __WindowManager() {
 
 		let el_win = el_modal.querySelector(".modal-window");
 		let el_content = el_win.querySelector(".modal-content");
-		let el_ok_bt = el_win.querySelector(".modal-button-ok");
-		let el_cancel_bt = el_win.querySelector(".modal-button-cancel");
+		let el_ok_bt = el_win.querySelector("[data-x-wm-modal-ok]");
+		let el_cancel_bt = el_win.querySelector("[data-x-wm-modal-cancel]");
 
 		let key_pressed = "";
 		el_win.addEventListener("keydown", function (ev) {
@@ -419,6 +395,37 @@ function __WindowManager() {
 		__organizeWindow(el_win, true, false);
 	};
 
+	var __goFullScreenWindow = function(el_win) {
+		// Safari/Firefox:
+		//  - https://github.com/whatwg/fullscreen/pull/232
+		//  - https://github.com/mozilla/standards-positions/issues/196
+		//  - https://github.com/whatwg/fullscreen/issues/231
+		//  - https://bugzilla.mozilla.org/show_bug.cgi?id=700123
+		if (document.documentElement.requestFullscreen && !$$("window-full-tab").length) {
+			document.documentElement.requestFullscreen().then(function() {
+				self.setFullTabWindow(el_win, true);
+				__activateWindow(el_win); // Почему-то теряется фокус
+				if (navigator.keyboard && navigator.keyboard.lock) {
+					navigator.keyboard.lock();
+				} else {
+					setTimeout(function() {
+						let html = (
+							"Shortcuts like Alt+Tab and Ctrl+W might not be captured.<br>"
+							+ "For best keyboard handling use any browser with<br><a target=\"_blank\""
+							+ " href=\"https://developer.mozilla.org/en-US/docs/Web"
+							+ "/API/Keyboard_API#Browser_compatibility\">keyboard lock support from this list</a>.<br><br>"
+							+ "In Chrome use HTTPS and enable <i>system-keyboard-lock</i><br>"
+							+ "by putting at URL <i>chrome://flags/#system-keyboard-lock</i>.<br><br>"
+							+ "Also you can use <a target=\"_blank\" href=\"https://docs.pikvm.org/shortcuts/\">"
+							+ " PiKVM Shortcuts Composer</a>."
+						);
+						self.modal("The Keyboard Lock API is not supported", html, true, false, "full-screen");
+					}, 150); // Avoid ResizeObserver() hack
+				}
+			});
+		}
+	};
+
 	var __setNavbarVisible = function(visible) {
 		if ($("navbar")) {
 			tools.hidden.setVisible($("navbar"), visible);
@@ -493,6 +500,11 @@ function __WindowManager() {
 	};
 
 	var __globalMouseButtonHandler = function(ev) {
+		if (ev.target.closest(".modal-window")) {
+			// Игнорировать клики внутри модального окна
+			return;
+		}
+
 		if (ev.target.closest(".modal")) {
 			// Клик по модальному полю возвращает фокус в окно
 			__activateWindow(ev.target.closest(".modal"));
@@ -583,8 +595,11 @@ function __WindowManager() {
 				el_win.style.height = gh + "px";
 			} else {
 				el_win.style.left = "";
-				el_win.style.height = "";
 				el_win.style.width = gw + "px";
+				// XXX: https://github.com/pikvm/pikvm/issues/1617
+				// fit-content нужен только для iOS.
+				// TODO: Проверить десктопный Safari/Webkit.
+				el_win.style.height = (tools.browser.is_ios ? "fit-content" : "");
 			}
 		} else if (!el_win.hasAttribute("data-wm-organize-hook")) {
 			// FIXME: Можно было бы проверять наличие organize_hook,

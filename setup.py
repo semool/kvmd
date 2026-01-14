@@ -56,7 +56,7 @@ def main() -> None:
 
     setup(
         name="kvmd",
-        version="4.127",
+        version="4.135",
         url="https://github.com/pikvm/kvmd",
         license="GPLv3",
         author="Maxim Devaev",
@@ -69,6 +69,8 @@ def main() -> None:
             "kvmd.validators",
             "kvmd.yamlconf",
             "kvmd.keyboard",
+            "kvmd.nbd",
+            "kvmd.nbd.remotes",
             "kvmd.plugins",
             "kvmd.plugins.auth",
             "kvmd.plugins.hid",
@@ -87,6 +89,7 @@ def main() -> None:
             "kvmd.apps.kvmd.switch",
             "kvmd.apps.kvmd.info",
             "kvmd.apps.kvmd.api",
+            "kvmd.apps.kvmd.api.redfish",
             "kvmd.apps.media",
             "kvmd.apps.pst",
             "kvmd.apps.pstrun",
@@ -96,6 +99,7 @@ def main() -> None:
             "kvmd.apps.otgmsd",
             "kvmd.apps.otgconf",
             "kvmd.apps.swctl",
+            "kvmd.apps.nbd",
             "kvmd.apps.htpasswd",
             "kvmd.apps.totp",
             "kvmd.apps.edidconf",
@@ -148,7 +152,7 @@ def main() -> None:
         classifiers=[
             "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
             "Development Status :: 5 - Production/Stable",
-            "Programming Language :: Python :: 3.13",
+            "Programming Language :: Python :: 3.14",
             "Topic :: System :: Systems Administration",
             "Operating System :: POSIX :: Linux",
             "Intended Audience :: System Administrators",

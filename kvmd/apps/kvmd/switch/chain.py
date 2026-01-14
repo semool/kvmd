@@ -21,7 +21,6 @@
 
 
 import multiprocessing
-import queue
 import select
 import dataclasses
 import time
@@ -30,8 +29,7 @@ from typing import AsyncGenerator
 
 from .lib import get_logger
 from .lib import tools
-from .lib import aiotools
-from .lib import aioproc
+from .lib import aiomulti
 
 from .types import Edids
 from .types import Dummies
@@ -209,8 +207,8 @@ class Chain:  # pylint: disable=too-many-instance-attributes
         self.__units: list[_UnitContext] = []
         self.__active_port = -1
 
-        self.__cmd_queue: "multiprocessing.Queue[_BaseCmd]" = multiprocessing.Queue()
-        self.__events_queue: "multiprocessing.Queue[BaseEvent]" = multiprocessing.Queue()
+        self.__cmd_q: aiomulti.AioMpQueue[_BaseCmd] = aiomulti.AioMpQueue()
+        self.__events_q: aiomulti.AioMpQueue[BaseEvent] = aiomulti.AioMpQueue()
 
         self.__stop_event = multiprocessing.Event()
 
@@ -279,32 +277,29 @@ class Chain:  # pylint: disable=too-many-instance-attributes
     # =====
 
     async def poll_events(self) -> AsyncGenerator[BaseEvent, None]:
-        proc = multiprocessing.Process(target=self.__subprocess, daemon=True)
+        proc = aiomulti.AioMpProcess("switch", self.__subprocess)
+        proc.start()
         try:
-            proc.start()
             while True:
-                try:
-                    yield (await aiotools.run_async(self.__events_queue.get, True, 0.1))
-                except queue.Empty:
-                    pass
+                (_, event) = await self.__events_q.async_fetch()
+                assert event is not None
+                yield event
         finally:
-            if proc.is_alive():
-                self.__stop_event.set()
-            if proc.is_alive() or proc.exitcode is not None:
-                await aiotools.run_async(proc.join)
+            self.__stop_event.set()
+            await proc.async_join()
 
     # =====
 
     def __queue_cmd(self, cmd: _BaseCmd) -> None:
         if not self.__stop_event.is_set():
-            self.__cmd_queue.put_nowait(cmd)
+            self.__cmd_q.put_nowait(cmd)
 
     def __queue_event(self, event: BaseEvent) -> None:
         if not self.__stop_event.is_set():
-            self.__events_queue.put_nowait(event)
+            self.__events_q.put_nowait(event)
 
     def __subprocess(self) -> None:
-        logger = aioproc.settle("Switch", "switch")
+        logger = get_logger(0)
         no_device_reported = False
         while True:
             try:
@@ -322,7 +317,7 @@ class Chain:  # pylint: disable=too-many-instance-attributes
                 logger.error("%s", tools.efmt(ex))
             except Exception:
                 logger.exception("Unexpected error in the Switch loop")
-            tools.clear_queue(self.__cmd_queue)
+            self.__cmd_q.clear_current()
             if self.__stop_event.is_set():
                 break
             time.sleep(1)
@@ -352,14 +347,14 @@ class Chain:  # pylint: disable=too-many-instance-attributes
         try:
             return bool(select.select([
                 self.__device.get_fd(),
-                self.__cmd_queue._reader,  # type: ignore  # pylint: disable=protected-access
+                self.__cmd_q.get_reader_fd(),
             ], [], [], 1)[0])
         except Exception as ex:
             raise DeviceError(ex)
 
     def __consume_commands(self) -> None:  # pylint: disable=too-many-branches
-        while not self.__cmd_queue.empty():
-            cmd = self.__cmd_queue.get()
+        while not self.__cmd_q.empty():
+            cmd = self.__cmd_q.get()
             match cmd:
                 case _CmdSetActual():
                     self.__actual = cmd.actual

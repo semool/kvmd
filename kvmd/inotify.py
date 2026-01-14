@@ -34,7 +34,6 @@ from typing import Generator
 
 from .logging import get_logger
 
-from . import aiotools
 from . import libc
 
 
@@ -199,7 +198,7 @@ class Inotify:
 
         self.__moved: dict[int, str] = {}
 
-        self.__events_queue: "asyncio.Queue[InotifyEvent]" = asyncio.Queue()
+        self.__events_q: "asyncio.Queue[InotifyEvent]" = asyncio.Queue()
 
     async def watch_all_changes(self, *paths: str) -> None:
         await self.watch(InotifyMask.ALL_CHANGES_EVENTS, *paths)
@@ -208,9 +207,9 @@ class Inotify:
         for path in paths:
             path = os.path.normpath(path)
             assert path not in self.__wd_by_path, path
-            get_logger().info("Watching for %s", path)
+            get_logger(2).info("Watching for %s", path)
             # Асинхронно, чтобы не висло на NFS
-            wd = _inotify_check(await aiotools.run_async(libc.inotify_add_watch, self.__fd, _fs_encode(path), mask))
+            wd = _inotify_check(await asyncio.to_thread(libc.inotify_add_watch, self.__fd, _fs_encode(path), mask))
             self.__wd_by_path[path] = wd
             self.__path_by_wd[wd] = path
 
@@ -224,13 +223,13 @@ class Inotify:
 #        del self.__path_by_wd[wd]
 
 #    def has_events(self) -> bool:
-#        return (not self.__events_queue.empty())
+#        return (not self.__events_q.empty())
 
     async def get_event(self, timeout: float) -> (InotifyEvent | None):
         assert timeout > 0
         try:
             return (await asyncio.wait_for(
-                asyncio.ensure_future(self.__events_queue.get()),
+                asyncio.ensure_future(self.__events_q.get()),
                 timeout=timeout,
             ))
         except asyncio.TimeoutError:
@@ -273,7 +272,7 @@ class Inotify:
                     del self.__wd_by_path[ignored_path]
                 continue
 
-            self.__events_queue.put_nowait(event)
+            self.__events_q.put_nowait(event)
 
     def __read_parsed_events(self) -> Generator[InotifyEvent, None, None]:
         for (wd, mask, cookie, name_bytes) in _inotify_parsed_buffer(self.__read_buffer()):

@@ -91,7 +91,7 @@ ul#navbar
 	li.left
 		a.menu-item.menu-action(href=root_prefix)
 			div &larr;
-			img.svg-gray(src=`${svg_dir}/logo.svg` alt="&pi;-kvm")
+			img.svg-gray(src=`${svg_dir}/logo.svg` alt="&pi;-kvm" style="height: 25px;")
 
 	include navbar-health.pug
 
@@ -100,11 +100,11 @@ ul#navbar
 			.menu-item
 				#stream-info
 
-	.hidden#navbar-full-controls(data-wm-on-full-tab)
+	.hidden(data-wm-on-full-tab)
 		li.right
 			.menu-item
-				button(data-wm-navbar-close)
-				button(data-wm-normalize)
+				button(data-wm-navbar-close style="width: 50px; height: 30px;")
+				button(data-wm-normalize style="width: 30px; height: 30px;")
 
 	include navbar-system.pug
 	include navbar-atx.pug

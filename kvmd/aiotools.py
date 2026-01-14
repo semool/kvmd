@@ -193,15 +193,6 @@ async def stop_all_deadly_tasks() -> None:
 
 
 # =====
-async def run_async(func: Callable[..., _RetvalT], *args: Any) -> _RetvalT:
-    return (await asyncio.get_running_loop().run_in_executor(None, func, *args))
-
-
-def run_sync(coro: Coroutine[Any, Any, _RetvalT]) -> _RetvalT:
-    return asyncio.get_event_loop().run_until_complete(coro)
-
-
-# =====
 async def wait_infinite() -> None:
     while True:
         await asyncio.sleep(3600)
@@ -212,15 +203,25 @@ async def wait_first(*aws: asyncio.Task) -> tuple[set[asyncio.Task], set[asyncio
 
 
 # =====
-async def spawn_and_follow(*coros: Coroutine) -> None:
-    tasks: list[asyncio.Task] = list(map(asyncio.create_task, coros))
+async def spawn_and_follow(
+    *coros: Coroutine,
+    wait: float=0.0,
+    tasks: (list[asyncio.Task] | None)=None,
+) -> None:
+
+    if tasks is None:
+        tasks = []
+
     try:
-        await asyncio.gather(*tasks)
-    except Exception:
+        for coro in coros:
+            tasks.append(asyncio.create_task(coro))
+        await wait_first(*tasks)
+        if wait > 0:
+            await asyncio.sleep(wait)
+    finally:
         for task in tasks:
             task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-        raise
+        await shield_fg(asyncio.gather(*tasks, return_exceptions=True))
 
 
 # =====

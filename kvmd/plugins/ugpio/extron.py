@@ -34,7 +34,6 @@ from ...logging import get_logger
 
 from ... import aiotools
 from ... import aiomulti
-from ... import aioproc
 
 from ...yamlconf import Option
 
@@ -67,11 +66,11 @@ class Plugin(BaseUserGpioDriver):  # pylint: disable=too-many-instance-attribute
         self.__read_timeout = read_timeout
         self.__protocol = protocol
 
-        self.__ctl_queue: "multiprocessing.Queue[int]" = multiprocessing.Queue()
-        self.__channel_queue: "multiprocessing.Queue[int | None]" = multiprocessing.Queue()
+        self.__ctl_q: aiomulti.AioMpQueue[int] = aiomulti.AioMpQueue()
+        self.__channel_q: aiomulti.AioMpQueue[int | None] = aiomulti.AioMpQueue()
         self.__channel: (int | None) = -1
 
-        self.__proc: (multiprocessing.Process | None) = None
+        self.__proc = aiomulti.AioMpProcess(f"gpio-extron-{self._instance_name}", self.__serial_worker)
         self.__stop_event = multiprocessing.Event()
 
     @classmethod
@@ -87,25 +86,20 @@ class Plugin(BaseUserGpioDriver):  # pylint: disable=too-many-instance-attribute
     def get_pin_validator(cls) -> Callable[[Any], Any]:
         return valid_number.mk(min=0, max=3, name="Extron USB channel")
 
-    def prepare(self) -> None:
-        assert self.__proc is None
-        self.__proc = multiprocessing.Process(target=self.__serial_worker, daemon=True)
+    async def prepare(self) -> None:
         self.__proc.start()
 
     async def run(self) -> None:
         while True:
-            (got, channel) = await aiomulti.queue_get_last(self.__channel_queue, 1)
+            (got, channel) = await self.__channel_q.async_fetch_last(1)
             if got and self.__channel != channel:
                 self.__channel = channel
                 self._notifier.notify()
 
     async def cleanup(self) -> None:
-        if self.__proc is not None:
-            if self.__proc.is_alive():
-                get_logger(0).info("Stopping %s daemon ...", self)
-                self.__stop_event.set()
-            if self.__proc.is_alive() or self.__proc.exitcode is not None:
-                self.__proc.join()
+        if self.__proc.is_alive():
+            self.__stop_event.set()
+            await self.__proc.async_join()
 
     async def read(self, pin: str) -> bool:
         if not self.__is_online():
@@ -116,24 +110,23 @@ class Plugin(BaseUserGpioDriver):  # pylint: disable=too-many-instance-attribute
         if not self.__is_online():
             raise GpioDriverOfflineError(self)
         if state:
-            self.__ctl_queue.put_nowait(int(pin))
+            self.__ctl_q.put_nowait(int(pin))
 
     # =====
 
     def __is_online(self) -> bool:
         return (
-            self.__proc is not None
-            and self.__proc.is_alive()
+            self.__proc.is_alive()
             and self.__channel is not None
         )
 
     def __serial_worker(self) -> None:
-        logger = aioproc.settle(str(self), f"gpio-extron-{self._instance_name}")
+        logger = get_logger(0)
         while not self.__stop_event.is_set():
             try:
                 with self.__get_serial() as tty:
                     data = b""
-                    self.__channel_queue.put_nowait(-1)
+                    self.__channel_q.put_nowait(-1)
 
                     # Switch and then recieve the state.
                     # FIXME: Get actual state without modifying the current.
@@ -142,15 +135,15 @@ class Plugin(BaseUserGpioDriver):  # pylint: disable=too-many-instance-attribute
                     while not self.__stop_event.is_set():
                         (channel, data) = self.__recv_channel(tty, data)
                         if channel is not None:
-                            self.__channel_queue.put_nowait(channel)
+                            self.__channel_q.put_nowait(channel)
 
-                        (got, channel) = aiomulti.queue_get_last_sync(self.__ctl_queue, 0.1)  # type: ignore
+                        (got, channel) = self.__ctl_q.fetch_last(0.1)
                         if got:
                             assert channel is not None
                             self.__send_channel(tty, channel)
 
             except Exception as ex:
-                self.__channel_queue.put_nowait(None)
+                self.__channel_q.put_nowait(None)
                 if isinstance(ex, serial.SerialException) and ex.errno == errno.ENOENT:  # pylint: disable=no-member
                     logger.error("Missing %s serial device: %s", self, self.__device_path)
                 else:

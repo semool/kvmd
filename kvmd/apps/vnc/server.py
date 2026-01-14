@@ -120,7 +120,7 @@ class _Client(RfbClient):  # pylint: disable=too-many-instance-attributes
         self.__kvmd_session: (KvmdClientSession | None) = None
         self.__kvmd_ws: (KvmdClientWs | None) = None
 
-        self.__fb_queue: "asyncio.Queue[dict]" = asyncio.Queue()
+        self.__fb_q: "asyncio.Queue[dict]" = asyncio.Queue()
         self.__fb_has_key = False
 
         self.__clipboard = ""
@@ -184,14 +184,8 @@ class _Client(RfbClient):  # pylint: disable=too-many-instance-attributes
 
     async def __process_ws_event(self, event_type: str, event: dict) -> None:
         if event_type == "info":
-            if "meta" in event:
-                host = ""
-                try:
-                    if isinstance(event["meta"]["server"]["host"], str):
-                        host = event["meta"]["server"]["host"].strip()
-                except Exception:
-                    pass
-                self.__info_host = host
+            if "node" in event:
+                self.__info_host = event["node"]["host"]
                 await self.__update_info()
 
         elif event_type == "switch":
@@ -266,9 +260,9 @@ class _Client(RfbClient):  # pylint: disable=too-many-instance-attributes
     async def __queue_frame(self, frame: (dict | str)) -> None:
         if isinstance(frame, str):
             frame = await self.__make_text_frame(frame)
-        if self.__fb_queue.qsize() > 10:
-            self.__fb_queue.get_nowait()
-        self.__fb_queue.put_nowait(frame)
+        if self.__fb_q.qsize() > 10:
+            self.__fb_q.get_nowait()
+        self.__fb_q.put_nowait(frame)
 
     async def __make_text_frame(self, text: str) -> dict:
         return {
@@ -282,7 +276,7 @@ class _Client(RfbClient):  # pylint: disable=too-many-instance-attributes
         last: (dict | None) = None
         async for _ in self._send_fb_allowed():
             while True:
-                frame = await self.__fb_queue.get()
+                frame = await self.__fb_q.get()
                 if (
                     last is None  # pylint: disable=too-many-boolean-expressions
                     or frame["format"] == StreamerFormats.JPEG
@@ -296,12 +290,12 @@ class _Client(RfbClient):  # pylint: disable=too-many-instance-attributes
                 ):
                     self.__fb_has_key = (frame["format"] == StreamerFormats.H264 and frame["key"])
                     last = frame
-                    if self.__fb_queue.qsize() == 0:
+                    if self.__fb_q.qsize() == 0:
                         break
                     continue
                 assert frame["format"] == StreamerFormats.H264
                 last["data"] += frame["data"]
-                if self.__fb_queue.qsize() == 0:
+                if self.__fb_q.qsize() == 0:
                     break
 
             if self._width != last["width"] or self._height != last["height"]:

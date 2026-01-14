@@ -32,10 +32,7 @@ from typing import Any
 
 from ....logging import get_logger
 
-from .... import tools
-from .... import aiotools
 from .... import aiomulti
-from .... import aioproc
 
 from ....yamlconf import Option
 
@@ -104,7 +101,7 @@ class BasePhy:
         raise NotImplementedError
 
 
-class BaseMcuHid(BaseHid, multiprocessing.Process):  # pylint: disable=too-many-instance-attributes
+class BaseMcuHid(BaseHid):  # pylint: disable=too-many-instance-attributes
     def __init__(  # pylint: disable=too-many-arguments,super-init-not-called
         self,
         phy: BasePhy,
@@ -123,8 +120,7 @@ class BaseMcuHid(BaseHid, multiprocessing.Process):  # pylint: disable=too-many-
         **gpio_kwargs: Any,
     ) -> None:
 
-        BaseHid.__init__(self, ignore_keys=ignore_keys, **mouse_x_range, **mouse_y_range, **jiggler)
-        multiprocessing.Process.__init__(self, daemon=True)
+        super().__init__(ignore_keys=ignore_keys, **mouse_x_range, **mouse_y_range, **jiggler)
 
         self.__read_retries = read_retries
         self.__common_retries = common_retries
@@ -137,10 +133,12 @@ class BaseMcuHid(BaseHid, multiprocessing.Process):  # pylint: disable=too-many-
         self.__gpio = Gpio(device_path=gpio_device_path, **gpio_kwargs)
         self.__reset_self = reset_self
 
-        self.__reset_required_event = multiprocessing.Event()
-        self.__events_queue: "multiprocessing.Queue[BaseEvent]" = multiprocessing.Queue()
+        self.__proc = aiomulti.AioMpProcess("hid", self.__subprocess)
 
-        self.__notifier = aiomulti.AioProcessNotifier()
+        self.__reset_required_event = multiprocessing.Event()
+        self.__events_q: aiomulti.AioMpQueue[BaseEvent] = aiomulti.AioMpQueue()
+
+        self.__notifier = aiomulti.AioMpNotifier()
         self.__state_flags = aiomulti.AioSharedFlags({
             "online": 0,
             "busy": 0,
@@ -171,9 +169,8 @@ class BaseMcuHid(BaseHid, multiprocessing.Process):  # pylint: disable=too-many-
             **cls._get_base_options(),
         }
 
-    def sysprep(self) -> None:
-        get_logger(0).info("Starting HID daemon ...")
-        self.start()
+    async def sysprep(self) -> None:
+        self.__proc.start()
 
     async def get_state(self) -> dict:
         state = await self.__state_flags.get()
@@ -254,13 +251,10 @@ class BaseMcuHid(BaseHid, multiprocessing.Process):  # pylint: disable=too-many-
     async def reset(self) -> None:
         self.__reset_required_event.set()
 
-    @aiotools.atomic_fg
     async def cleanup(self) -> None:
-        if self.is_alive():
-            get_logger(0).info("Stopping HID daemon ...")
+        if self.__proc.is_alive():
             self.__stop_event.set()
-        if self.is_alive() or self.exitcode is not None:
-            self.join()
+            await self.__proc.async_join()
 
     # =====
 
@@ -309,11 +303,11 @@ class BaseMcuHid(BaseHid, multiprocessing.Process):  # pylint: disable=too-many-
                 # FIXME: Если очистка производится со стороны процесса хида, то возможна гонка между
                 # очисткой и добавлением нового события. Неприятно, но не смертельно.
                 # Починить блокировкой после перехода на асинхронные очереди.
-                tools.clear_queue(self.__events_queue)
-            self.__events_queue.put_nowait(event)
+                self.__events_q.clear_current()
+            self.__events_q.put_nowait(event)
 
-    def run(self) -> None:  # pylint: disable=too-many-branches
-        logger = aioproc.settle("HID", "hid")
+    def __subprocess(self) -> None:  # pylint: disable=too-many-branches
+        logger = get_logger(0)
         while not self.__stop_event.is_set():
             try:
                 with self.__gpio:
@@ -337,13 +331,13 @@ class BaseMcuHid(BaseHid, multiprocessing.Process):  # pylint: disable=too-many-
                     continue
                 reset = True
                 with self.__phy.connected() as conn:
-                    while not (self.__stop_event.is_set() and self.__events_queue.qsize() == 0):
+                    while not (self.__stop_event.is_set() and self.__events_q.qsize() == 0):
                         if self.__reset_required_event.is_set():
                             self.__set_state_busy(True)
                             self.__reset_required_event.clear()
                             break  # Проваливаемся и резетим в __hid_loop_wait_device()
                         try:
-                            event = self.__events_queue.get(timeout=0.1)
+                            event = self.__events_q.get(timeout=0.1)
                         except queue.Empty:
                             self.__process_request(conn, REQUEST_PING)
                         else:

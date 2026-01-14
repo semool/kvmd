@@ -61,7 +61,7 @@
     <button class="hidden" id="navbar-show-button" data-wm-navbar-show data-wm-on-full-tab></button>
     <ul id="navbar">
       <li class="left"><a class="menu-item menu-action" href="../">
-          <div>&larr;</div><img class="svg-gray" src="../share/svg/logo.svg" alt="&amp;pi;-kvm"></a></li>
+          <div>&larr;</div><img class="svg-gray" src="../share/svg/logo.svg" alt="&amp;pi;-kvm" style="height: 25px;"></a></li>
       <div class="hidden" id="hw-health-dropdown">
         <li class="left">
           <div class="menu-item menu-button" href="#"><img class="hidden" id="hw-health-undervoltage-led" src="../share/svg/led-undervoltage.svg"><img class="hidden" id="hw-health-overheating-led" src="../share/svg/led-overheating.svg">
@@ -153,11 +153,11 @@
           </div>
         </li>
       </div>
-      <div class="hidden" id="navbar-full-controls" data-wm-on-full-tab>
+      <div class="hidden" data-wm-on-full-tab>
         <li class="right">
           <div class="menu-item">
-            <button data-wm-navbar-close></button>
-            <button data-wm-normalize></button>
+            <button data-wm-navbar-close style="width: 50px; height: 30px;"></button>
+            <button data-wm-normalize style="width: 30px; height: 30px;"></button>
           </div>
         </li>
       </div>
@@ -300,6 +300,16 @@
                     <div class="switch-box">
                       <input disabled type="checkbox" id="stream-mic-switch">
                       <label for="stream-mic-switch"><span class="switch-inner"></span><span class="switch"></span></label>
+                    </div>
+                  </td>
+            </tr>
+            <tr class="feature-disabled" id="stream-cam">
+                  <td>Camera:
+                  </td>
+                  <td align="right">
+                    <div class="switch-box">
+                      <input disabled type="checkbox" id="stream-cam-switch">
+                      <label for="stream-cam-switch"><span class="switch-inner"></span><span class="switch"></span></label>
                     </div>
                   </td>
             </tr>
@@ -1063,7 +1073,6 @@
           <button data-wm-window-close></button>
         </div>
       </div>
-      <div id="stream-info"></div>
       <div class="stream-box-offline" id="stream-box">
         <div id="stream-keyboard-magic"></div><img id="stream-image" src="../share/png/blank-stream.png">
         <video class="hidden" id="stream-video" disablePictureInPicture="true" autoplay playsinline muted></video>
@@ -2175,12 +2184,14 @@
               <div class="label"><b>&bull;</b><br>Right</div>
             </div>
           </div>
-          <!--.keypad-row
-          .key.small.rounded-left(data-keypad-code="up" data-keypad-allow-autohold)
-          	.label <b>&bull;</b><br>Up
-          .key.small.rounded-right(data-keypad-code="down" data-keypad-allow-autohold)
-          	.label <b>&bull;</b><br>Down
-          -->
+          <div class="keypad-row" style="display: none;">
+            <div class="key small rounded-left" data-keypad-code="up" data-keypad-allow-autohold>
+              <div class="label"><b>&bull;</b><br>Up</div>
+            </div>
+            <div class="key small rounded-right" data-keypad-code="down" data-keypad-allow-autohold>
+              <div class="label"><b>&bull;</b><br>Down</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -2377,7 +2388,7 @@
                 <div class="code" id="about-meta">
                   <div><span class="code-comment">
                       // You can get this JSON using handle
-                      <a target="_blank" href="../api/info?fields=meta">/api/info?fields=meta</a><br>
+                      <a target="_blank" href="../api/info?legacy=0&amp;fields=meta">/api/info?legacy=0&amp;fields=meta</a><br>
                       // In the standard configuration this data<br>
                       // is specified in the file /etc/kvmd/meta.yaml</span><br>
                     <pre id="kvmd-meta-json">No data</pre>
@@ -3061,7 +3072,7 @@
       </li>
     </ul>
     <ul class="footer">
-      <li class="left"><span id="kvmd-meta-server-host" title="KVM/Server name (see System/About)"></span>&nbsp; | &nbsp;<span id="kvmd-info-platform" title="PiKVM Platform"></span>&nbsp; | &nbsp;<span id="kvmd-version-kvmd" title="KVMD version"></span>&nbsp; | &nbsp;<span id="kvmd-version-streamer" title="Streamer version"></span></li>
+      <li class="left"><span id="kvmd-node-host" title="PiKVM Hostname"></span>&nbsp; | &nbsp;<span id="kvmd-info-platform" title="PiKVM Platform"></span>&nbsp; | &nbsp;<span id="kvmd-version-kvmd" title="KVMD version"></span>&nbsp; | &nbsp;<span id="kvmd-version-streamer" title="Streamer version"></span></li>
       <li class="right"><a target="_blank" href="https://pikvm.org">PiKVM Project</a>&nbsp; | &nbsp;<a target="_blank" href="https://docs.pikvm.org">Documentation</a>&nbsp; | &nbsp;<a target="_blank" href="https://pikvm.org/support">Support</a></li>
     </ul>
   </body>

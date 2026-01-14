@@ -20,6 +20,7 @@
 # ========================================================================== #
 
 
+import asyncio
 import copy
 
 from typing import AsyncGenerator
@@ -64,7 +65,7 @@ class Plugin(BaseHid):  # pylint: disable=too-many-instance-attributes
 
         self.__udc = udc
 
-        self.__notifier = aiomulti.AioProcessNotifier()
+        self.__notifier = aiomulti.AioMpNotifier()
 
         win98_fix = mouse.pop("absolute_win98_fix")
         common = {"notifier": self.__notifier, "noop": noop}
@@ -122,7 +123,7 @@ class Plugin(BaseHid):  # pylint: disable=too-many-instance-attributes
             **cls._get_base_options(),
         }
 
-    def sysprep(self) -> None:
+    async def sysprep(self) -> None:
         udc = usb.find_udc(self.__udc)
         get_logger(0).info("Using UDC %s", udc)
         self.__keyboard_proc.start(udc)
@@ -177,14 +178,13 @@ class Plugin(BaseHid):  # pylint: disable=too-many-instance-attributes
             self.__mouse_alt_proc.send_reset_event()
 
     async def cleanup(self) -> None:
-        try:
-            self.__keyboard_proc.cleanup()
-        finally:
-            try:
-                self.__mouse_proc.cleanup()
-            finally:
-                if self.__mouse_alt_proc:
-                    self.__mouse_alt_proc.cleanup()
+        coros = [
+            self.__keyboard_proc.cleanup(),
+            self.__mouse_proc.cleanup(),
+        ]
+        if self.__mouse_alt_proc:
+            coros.append(self.__mouse_alt_proc.cleanup())
+        await asyncio.gather(*coros)
 
     # =====
 

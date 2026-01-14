@@ -20,4 +20,9 @@
 # ========================================================================== #
 
 
-__version__ = "4.127"
+__version__ = "4.135"
+
+
+import multiprocessing
+
+multiprocessing.set_start_method("fork")  # FIXME

@@ -31,9 +31,7 @@ from typing import Any
 from ....logging import get_logger
 
 from .... import tools
-from .... import aiotools
 from .... import aiomulti
-from .... import aioproc
 
 from ....yamlconf import Option
 
@@ -51,7 +49,7 @@ from .keyboard import Keyboard
 
 
 # =====
-class Plugin(BaseHid, multiprocessing.Process):  # pylint: disable=too-many-instance-attributes
+class Plugin(BaseHid):  # pylint: disable=too-many-instance-attributes
     def __init__(  # pylint: disable=too-many-arguments,super-init-not-called
         self,
         ignore_keys: list[str],
@@ -64,24 +62,25 @@ class Plugin(BaseHid, multiprocessing.Process):  # pylint: disable=too-many-inst
         read_timeout: float,
     ) -> None:
 
-        BaseHid.__init__(self, ignore_keys=ignore_keys, **mouse_x_range, **mouse_y_range, **jiggler)
-        multiprocessing.Process.__init__(self, daemon=True)
+        super().__init__(ignore_keys=ignore_keys, **mouse_x_range, **mouse_y_range, **jiggler)
 
         self.__device_path = device_path
         self.__speed = speed
         self.__read_timeout = read_timeout
 
         self.__reset_required_event = multiprocessing.Event()
-        self.__cmd_queue: "multiprocessing.Queue[bytes]" = multiprocessing.Queue()
+        self.__cmd_q: aiomulti.AioMpQueue[bytes] = aiomulti.AioMpQueue()
 
-        self.__notifier = aiomulti.AioProcessNotifier()
+        self.__notifier = aiomulti.AioMpNotifier()
         self.__state_flags = aiomulti.AioSharedFlags({
             "online": 0,
             "busy": 0,
             "status": 0,
         }, self.__notifier, type=int)
 
+        self.__proc = aiomulti.AioMpProcess("hid", self.__subprocess)
         self.__stop_event = multiprocessing.Event()
+
         self.__chip = Chip(device_path, speed, read_timeout)
         self.__keyboard = Keyboard()
         self.__mouse = Mouse()
@@ -95,9 +94,8 @@ class Plugin(BaseHid, multiprocessing.Process):  # pylint: disable=too-many-inst
             **cls._get_base_options(),
         }
 
-    def sysprep(self) -> None:
-        get_logger(0).info("Starting HID daemon ...")
-        self.start()
+    async def sysprep(self) -> None:
+        self.__proc.start()
 
     async def get_state(self) -> dict:
         state = await self.__state_flags.get()
@@ -140,13 +138,10 @@ class Plugin(BaseHid, multiprocessing.Process):  # pylint: disable=too-many-inst
     async def reset(self) -> None:
         self.__reset_required_event.set()
 
-    @aiotools.atomic_fg
     async def cleanup(self) -> None:
-        if self.is_alive():
-            get_logger(0).info("Stopping HID daemon ...")
+        if self.__proc.is_alive():
             self.__stop_event.set()
-        if self.is_alive() or self.exitcode is not None:
-            self.join()
+            await self.__proc.async_join()
 
     # =====
 
@@ -184,7 +179,7 @@ class Plugin(BaseHid, multiprocessing.Process):  # pylint: disable=too-many-inst
         self.__queue_cmd(self.__mouse.process_relative(delta_x, delta_y))
 
     def _clear_events(self) -> None:
-        tools.clear_queue(self.__cmd_queue)
+        self.__cmd_q.clear_current()
 
     def __queue_cmd(self, cmd: bytes, clear: bool=False) -> None:
         if not self.__stop_event.is_set():
@@ -192,11 +187,11 @@ class Plugin(BaseHid, multiprocessing.Process):  # pylint: disable=too-many-inst
                 # FIXME: Если очистка производится со стороны процесса хида, то возможна гонка между
                 # очисткой и добавлением нового события. Неприятно, но не смертельно.
                 # Починить блокировкой после перехода на асинхронные очереди.
-                tools.clear_queue(self.__cmd_queue)
-            self.__cmd_queue.put_nowait(cmd)
+                self.__cmd_q.clear_current()
+            self.__cmd_q.put_nowait(cmd)
 
-    def run(self) -> None:  # pylint: disable=too-many-branches
-        logger = aioproc.settle("HID", "hid")
+    def __subprocess(self) -> None:
+        logger = get_logger(0)
         while not self.__stop_event.is_set():
             try:
                 self.__hid_loop()
@@ -208,7 +203,7 @@ class Plugin(BaseHid, multiprocessing.Process):  # pylint: disable=too-many-inst
         while not self.__stop_event.is_set():
             try:
                 with self.__chip.connected() as conn:
-                    while not (self.__stop_event.is_set() and self.__cmd_queue.qsize() == 0):
+                    while not (self.__stop_event.is_set() and self.__cmd_q.qsize() == 0):
                         if self.__reset_required_event.is_set():
                             try:
                                 self.__set_state_busy(True)
@@ -216,7 +211,7 @@ class Plugin(BaseHid, multiprocessing.Process):  # pylint: disable=too-many-inst
                             finally:
                                 self.__reset_required_event.clear()
                         try:
-                            cmd = self.__cmd_queue.get(timeout=0.1)
+                            cmd = self.__cmd_q.get(timeout=0.1)
                             # get_logger(0).info(f"HID : cmd = {cmd}")
                         except queue.Empty:
                             self.__process_cmd(conn, b"")

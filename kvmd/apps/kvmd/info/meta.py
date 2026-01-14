@@ -20,6 +20,7 @@
 # ========================================================================== #
 
 
+import asyncio
 import socket
 
 from typing import AsyncGenerator
@@ -39,9 +40,17 @@ class MetaInfoSubmanager(BaseInfoSubmanager):
         self.__meta_path = meta_path
         self.__notifier = aiotools.AioNotifier()
 
+    async def get_server_host(self) -> str:
+        meta = await self.get_state()
+        try:
+            host = str(meta.get("server", {})["host"]).strip()  # type: ignore
+        except Exception:
+            host = ""
+        return (host or socket.gethostname())
+
     async def get_state(self) -> (dict | None):
         try:
-            meta = ((await aiotools.run_async(load_yaml_file, self.__meta_path)) or {})
+            meta = ((await asyncio.to_thread(load_yaml_file, self.__meta_path)) or {})
             if meta["server"]["host"] == "@auto":
                 meta["server"]["host"] = socket.gethostname()
             return meta

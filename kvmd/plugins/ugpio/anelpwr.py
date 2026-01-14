@@ -98,14 +98,12 @@ class Plugin(BaseUserGpioDriver):  # pylint: disable=too-many-instance-attribute
         self.__initial[pin] = initial
         self.__state[pin] = None
 
-    def prepare(self) -> None:
-        async def inner_prepare() -> None:
-            await asyncio.gather(*[
-                self.write(pin, state)
-                for (pin, state) in self.__initial.items()
-                if state is not None
-            ], return_exceptions=True)
-        aiotools.run_sync(inner_prepare())
+    async def prepare(self) -> None:
+        await asyncio.gather(*[
+            self.write(pin, state)
+            for (pin, state) in self.__initial.items()
+            if state is not None
+        ], return_exceptions=True)
 
     async def run(self) -> None:
         prev_state: (dict | None) = None
@@ -151,17 +149,14 @@ class Plugin(BaseUserGpioDriver):  # pylint: disable=too-many-instance-attribute
 
     def __ensure_http_session(self) -> aiohttp.ClientSession:
         if not self.__http_session:
-            kwargs: dict = {
-                "headers": {
-                    "User-Agent": htclient.make_user_agent("KVMD"),
-                },
-                "timeout": aiohttp.ClientTimeout(total=self.__timeout),
-            }
+            kwargs: dict = {}
             if self.__user:
                 kwargs["auth"] = aiohttp.BasicAuth(self.__user, self.__passwd)
-            if not self.__verify:
-                kwargs["connector"] = aiohttp.TCPConnector(ssl=False)
-            self.__http_session = aiohttp.ClientSession(**kwargs)
+            self.__http_session = aiohttp.ClientSession(
+                headers={"User-Agent": htclient.make_user_agent("KVMD")},
+                connector=aiohttp.TCPConnector(ssl=self.__verify),
+                timeout=aiohttp.ClientTimeout(total=self.__timeout),
+            )
         return self.__http_session
 
     def __str__(self) -> str:
