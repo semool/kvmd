@@ -25,6 +25,7 @@ import asyncio
 import contextlib
 import time
 
+from typing import Self
 from typing import AsyncGenerator
 
 import aiofiles
@@ -86,6 +87,11 @@ class MsdImageExistsError(MsdOperationError):
         super().__init__("This image is already exists")
 
 
+class MsdImageStaticError(MsdOperationError):
+    def __init__(self) -> None:
+        super().__init__("This image can't be removed")
+
+
 # =====
 class BaseMsdReader:
     def get_state(self) -> dict:
@@ -97,7 +103,7 @@ class BaseMsdReader:
     def get_chunk_size(self) -> int:
         raise NotImplementedError()
 
-    async def read_chunked(self) -> AsyncGenerator[bytes, None]:
+    async def read_chunked(self) -> AsyncGenerator[bytes]:
         if self is not None:  # XXX: Vulture and pylint hack
             raise NotImplementedError()
         yield
@@ -121,7 +127,7 @@ class BaseMsd(BasePlugin):
     async def trigger_state(self) -> None:
         raise NotImplementedError()
 
-    async def poll_state(self) -> AsyncGenerator[dict, None]:
+    async def poll_state(self) -> AsyncGenerator[dict]:
         # ==== Granularity table ====
         #   - enabled -- Full
         #   - online  -- Partial
@@ -159,17 +165,24 @@ class BaseMsd(BasePlugin):
         raise NotImplementedError()
 
     @contextlib.asynccontextmanager
-    async def read_image(self, name: str) -> AsyncGenerator[BaseMsdReader, None]:
+    async def read_image(self, name: str) -> AsyncGenerator[BaseMsdReader]:
         _ = name
         if self is not None:  # XXX: Vulture and pylint hack
             raise NotImplementedError()
         yield BaseMsdReader()
 
     @contextlib.asynccontextmanager
-    async def write_image(self, name: str, size: int, remove_incomplete: (bool | None)) -> AsyncGenerator[BaseMsdWriter, None]:
+    async def write_image(
+        self,
+        name: str,
+        size: int,
+        remove_incomplete: bool,
+    ) -> AsyncGenerator[BaseMsdWriter]:
+
         _ = name
         _ = size
         _ = remove_incomplete
+
         if self is not None:  # XXX: Vulture and pylint hack
             raise NotImplementedError()
         yield BaseMsdWriter()
@@ -179,8 +192,15 @@ class BaseMsd(BasePlugin):
 
 
 class MsdFileReader(BaseMsdReader):  # pylint: disable=too-many-instance-attributes
-    def __init__(self, notifier: aiotools.AioNotifier, name: str, path: str, chunk_size: int) -> None:
-        self.__notifier = notifier
+    def __init__(
+        self,
+        nr: aiotools.AioNotifier,
+        name: str,
+        path: str,
+        chunk_size: int,
+    ) -> None:
+
+        self.__nr = nr
         self.__name = name
         self.__path = path
         self.__chunk_size = chunk_size
@@ -204,7 +224,7 @@ class MsdFileReader(BaseMsdReader):  # pylint: disable=too-many-instance-attribu
     def get_chunk_size(self) -> int:
         return self.__chunk_size
 
-    async def read_chunked(self) -> AsyncGenerator[bytes, None]:
+    async def read_chunked(self) -> AsyncGenerator[bytes]:
         assert self.__file is not None
         while True:
             chunk = await self.__file.read(self.__chunk_size)  # type: ignore
@@ -216,11 +236,11 @@ class MsdFileReader(BaseMsdReader):  # pylint: disable=too-many-instance-attribu
             now = time.monotonic()
             if self.__tick + 1 < now or self.__readed == self.__file_size:
                 self.__tick = now
-                self.__notifier.notify()
+                self.__nr.notify()
 
             yield chunk
 
-    async def open(self) -> "MsdFileReader":
+    async def open(self) -> Self:
         assert self.__file is None
         get_logger(1).info("Reading %r image from MSD ...", self.__name)
         self.__file_size = (await aiofiles.os.stat(self.__path)).st_size
@@ -238,8 +258,17 @@ class MsdFileReader(BaseMsdReader):  # pylint: disable=too-many-instance-attribu
 
 
 class MsdFileWriter(BaseMsdWriter):  # pylint: disable=too-many-instance-attributes
-    def __init__(self, notifier: aiotools.AioNotifier, name: str, path: str, file_size: int, sync_size: int, chunk_size: int) -> None:
-        self.__notifier = notifier
+    def __init__(
+        self,
+        nr: aiotools.AioNotifier,
+        name: str,
+        path: str,
+        file_size: int,
+        sync_size: int,
+        chunk_size: int,
+    ) -> None:
+
+        self.__nr = nr
         self.__name = name
         self.__path = path
         self.__file_size = file_size
@@ -275,16 +304,20 @@ class MsdFileWriter(BaseMsdWriter):  # pylint: disable=too-many-instance-attribu
         now = time.monotonic()
         if self.__tick + 1 < now:
             self.__tick = now
-            self.__notifier.notify()
+            self.__nr.notify()
 
         return self.__written
 
-    async def open(self) -> "MsdFileWriter":
+    async def open(self) -> Self:
         assert self.__file is None
         get_logger(1).info("Writing %r image (%d bytes) to MSD ...", self.__name, self.__file_size)
         await aiofiles.os.makedirs(os.path.dirname(self.__path), exist_ok=True)
         self.__file = await aiofiles.open(self.__path, mode="w+b", buffering=0)  # type: ignore
-        await asyncio.to_thread(os.ftruncate, self.__file.fileno(), self.__file_size)  # type: ignore
+        try:
+            await asyncio.to_thread(os.ftruncate, self.__file.fileno(), self.__file_size)  # type: ignore
+        except Exception:
+            await self.__file.close()  # type: ignore
+            raise
         return self
 
     async def finish(self) -> bool:
@@ -302,7 +335,8 @@ class MsdFileWriter(BaseMsdWriter):  # pylint: disable=too-many-instance-attribu
                 (log, result) = (logger.error, "INCOMPLETE")
             else:  # written > size
                 (log, result) = (logger.warning, "OVERFLOW")
-            log("Written %d of %d bytes to MSD image %r: %s", self.__written, self.__file_size, self.__name, result)
+            log("Written %d of %d bytes to MSD image %r: %s",
+                self.__written, self.__file_size, self.__name, result)
             await self.__file.close()  # type: ignore
         except Exception:
             logger.exception("Can't close image writer")

@@ -32,6 +32,17 @@ from typing import Any
 
 
 # =====
+def check_abs(path: str) -> None:
+    if not path:
+        raise ValueError("The path is empty")
+    if not path.startswith("/"):
+        raise ValueError(f"The path is not an absolute: {path}")
+    # if ".." in path.split("/"):
+    if "/../" in path or path.endswith("/.."):  # It's a bit faster
+        raise ValueError(f"Tha path contains forbidden '..' component: {path}")
+
+
+# =====
 def remap(value: int, in_min: int, in_max: int, out_min: int, out_max: int) -> int:
     result = int((value - in_min) * (out_max - out_min) // ((in_max - in_min) or 1) + out_min)
     return min(max(result, out_min), out_max)
@@ -44,6 +55,14 @@ def cmdfmt(cmd: list[str]) -> str:
 
 def efmt(ex: Exception) -> str:
     return f"{type(ex).__name__}: {ex}"
+
+
+def is_oserror(ex: Exception, *errnos: int) -> bool:
+    if not isinstance(ex, OSError):
+        return False
+    if len(errnos) == 0 or ex.errno in errnos:
+        return True
+    return False
 
 
 # =====
@@ -116,11 +135,27 @@ def atomic_file_edit(path: str) -> Generator[str]:
         try:
             st = os.stat(path)
             with open(path, "rb") as file:
-                os.write(tmp_fd, file.read())
                 os.fchown(tmp_fd, st.st_uid, st.st_gid)
                 os.fchmod(tmp_fd, st.st_mode)
+                os.write(tmp_fd, file.read())
         finally:
             os.close(tmp_fd)
+        yield tmp_path
+        os.rename(tmp_path, path)
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+@contextlib.contextmanager
+def atomic_file_put(path: str, mode: int) -> Generator[str]:
+    (tmp_fd, tmp_path) = tempfile.mkstemp(
+        prefix=f".{os.path.basename(path)}.",
+        dir=os.path.dirname(path),
+    )
+    try:
+        os.close(tmp_fd)
+        os.chmod(tmp_path, mode)
         yield tmp_path
         os.rename(tmp_path, path)
     finally:

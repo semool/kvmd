@@ -17,7 +17,6 @@ RUN \
 		glibc \
 		pacman \
 		openssl \
-		openssl-1.1 \
 	&& pacman-db-upgrade \
 	&& $PACMAN -Syu \
 		p11-kit \
@@ -38,8 +37,10 @@ RUN \
 		python \
 		python-pip \
 		python-build \
+		python-installer \
 		python-wheel \
 		python-setuptools \
+		python-installer \
 		python-tox \
 		python-mako \
 		python-yaml \
@@ -99,7 +100,8 @@ RUN \
 		htmlhint \
 		pug \
 		pug-cli \
-		@babel/eslint-parser
+		@babel/eslint-parser \
+		globals
 WORKDIR /
 
 ARG USTREAMER_MIN_VERSION

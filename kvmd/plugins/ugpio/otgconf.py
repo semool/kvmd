@@ -23,6 +23,7 @@
 import os
 import asyncio
 
+from typing import Final
 from typing import Callable
 from typing import Any
 
@@ -34,7 +35,10 @@ from ... import aiotools
 from ... import usb
 
 from ...yamlconf import Section
+from ...yamlconf import Option
 
+from ...validators.basic import valid_float_f01
+from ...validators.basic import valid_stripped_string
 from ...validators.basic import valid_stripped_string_not_empty
 
 from . import BaseUserGpioDriver
@@ -46,21 +50,26 @@ class Plugin(BaseUserGpioDriver):
         self,
         instance_name: str,
         notifier: aiotools.AioNotifier,
-
-        otg_config: Section,  # XXX: Not from options, see /kvmd/apps/kvmd/__init__.py for details
+        c: Section,
     ) -> None:
 
-        super().__init__(instance_name, notifier)
+        super().__init__(instance_name, notifier, c)
 
-        self.__udc: str = otg_config.udc
-        self.__init_delay: float = otg_config.init_delay
+        self.__init_delay: Final[float] = c.init_delay
+        self.__udc: str = c.udc
 
-        gadget: str = otg_config.gadget
-        self.__udc_path = usb.get_gadget_path(gadget, usb.G_UDC)
-        self.__functions_path = usb.get_gadget_path(gadget, usb.G_FUNCTIONS)
-        self.__profile_path = usb.get_gadget_path(gadget, usb.G_PROFILE)
+        self.__udc_path = usb.get_gadget_path(usb.G_UDC)
+        self.__functions_path = usb.get_gadget_path(usb.G_FUNCTIONS)
+        self.__profile_path = usb.get_gadget_path(usb.G_PROFILE)
 
         self.__lock = asyncio.Lock()
+
+    @classmethod
+    def get_plugin_options(cls) -> dict[str, Option]:
+        return {
+            "udc":        Option("",  type=valid_stripped_string),
+            "init_delay": Option(3.0, type=valid_float_f01),
+        }
 
     @classmethod
     def get_pin_validator(cls) -> Callable[[Any], Any]:
@@ -85,17 +94,10 @@ class Plugin(BaseUserGpioDriver):
                     await inotify.watch_all_changes(self.__profile_path)
                     self._notifier.notify()
                     while True:
-                        need_restart = False
-                        need_notify = False
-                        for event in (await inotify.get_series(timeout=1)):
-                            need_notify = True
-                            if event.restart:
-                                logger.warning("Got fatal inotify event: %s; reinitializing OTG-bind ...", event)
-                                need_restart = True
-                                break
-                        if need_restart:
+                        restart = await inotify.consume_until_restart()
+                        if restart:
                             break
-                        if need_notify:
+                        elif restart is not None:
                             self._notifier.notify()
             except Exception:
                 logger.exception("Unexpected OTG-bind watcher error")

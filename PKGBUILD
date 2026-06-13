@@ -39,15 +39,15 @@ for _variant in "${_variants[@]}"; do
 	pkgname+=(kvmd-platform-$_platform-$_board)
 done
 pkgbase=kvmd
-pkgver=4.135
+pkgver=4.175
 pkgrel=1
 pkgdesc="The main PiKVM daemon"
 url="https://github.com/pikvm/kvmd"
 license=(GPL)
 arch=(any)
 depends=(
-	"python>=3.13"
-	"python<3.14"
+	"python>=3.14"
+	"python<3.15"
 	python-yaml
 	python-ruamel-yaml
 	python-aiohttp
@@ -97,7 +97,10 @@ depends=(
 	certbot
 	"raspberrypi-io-access>=0.7"
 	raspberrypi-utils
-	"ustreamer>=6.41"
+	"ustreamer>=6.47"
+
+	# Temporary for kvmd-nbd
+	nbd
 
 	# Systemd UDEV bug
 	"systemd>=248.3-2"
@@ -105,9 +108,6 @@ depends=(
 	# https://bugzilla.redhat.com/show_bug.cgi?id=2035802
 	# https://archlinuxarm.org/forum/viewtopic.php?f=15&t=15725&start=40
 	"zstd>=1.5.1-2.1"
-
-	# Possible hotfix for the new os update
-	openssl-1.1
 
 	# Bootconfig
 	dos2unix
@@ -145,29 +145,33 @@ conflicts=(
 	python-bcrypt
 )
 makedepends=(
+	python-build
+	python-installer
+	python-wheel
 	python-setuptools
-	python-pip
 )
-source=("$url/archive/v$pkgver.tar.gz")
+source=("kvmd-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
 md5sums=(SKIP)
 backup=(
 	etc/kvmd/{override,meta}.yaml
 	etc/kvmd/{ht,ipmi,vnc}passwd
 	etc/kvmd/totp.secret
-	etc/kvmd/nginx/{kvmd.ctx-{http,server},certbot.ctx-server}.conf
-	etc/kvmd/nginx/loc-{login,nocache,proxy,websocket,nobuffering,bigpost}.conf
-	etc/kvmd/nginx/{mime-types,ssl}.conf
+	etc/kvmd/nginx/ssl.conf
 	etc/kvmd/nginx/nginx.conf.mako
 	etc/kvmd/janus/janus{,.plugin.ustreamer,.transport.websockets}.jcfg
 	etc/kvmd/web.css
 )
 
+build() {
+	cd "$srcdir/kvmd-$pkgver"
+	python -m build --wheel --no-isolation
+}
 
 package_kvmd() {
 	install=kvmd.install
 
 	cd "$srcdir/kvmd-$pkgver"
-	pip install --root="$pkgdir" --no-deps .
+	python -m installer --destdir="$pkgdir" dist/*.whl
 
 	install -Dm755 -t "$pkgdir/usr/bin" scripts/kvmd-{bootconfig,gencert,certbot}
 
@@ -218,14 +222,14 @@ for _variant in "${_variants[@]}"; do
 	_base=${_platform%-*}
 	_video=${_platform#*-}
 	eval "package_kvmd-platform-$_platform-$_board() {
-		cd \"kvmd-\$pkgver\"
+		cd \"kvmd-$pkgver\"
 
 		install=platform.install
 
 		backup=()
 
 		pkgdesc=\"PiKVM platform configs - $_platform for $_board\"
-		depends=(kvmd=$pkgver-$pkgrel \"linux-rpi-pikvm>=6.12.56-1\" \"raspberrypi-bootloader-pikvm>=20251031-1\")
+		depends=(kvmd=\"${epoch:+$epoch:}$pkgver-$pkgrel\" \"linux-rpi-pikvm>=6.12.56-6\" \"raspberrypi-bootloader-pikvm>=20251031-1\")
 
 		if [[ $_base == v0 ]]; then
 			depends=(\"\${depends[@]}\" platformio-core avrdude make patch)
@@ -240,6 +244,7 @@ for _variant in "${_variants[@]}"; do
 			install -Dm755 -t \"\$pkgdir/usr/bin\" scripts/kvmd-udev-restart-pass
 		fi
 
+		install -DTm644 configs/os/modprobe.conf \"\$pkgdir/usr/lib/modprobe.d/99-kvmd.conf\"
 		install -DTm644 configs/os/sysctl.conf \"\$pkgdir/usr/lib/sysctl.d/99-kvmd.conf\"
 		install -DTm644 configs/os/udev/common.rules \"\$pkgdir/usr/lib/udev/rules.d/99-kvmd-common.rules\"
 		install -DTm644 configs/os/udev/$_platform-$_board.rules \"\$pkgdir/usr/lib/udev/rules.d/99-kvmd.rules\"

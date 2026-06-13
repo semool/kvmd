@@ -60,15 +60,17 @@ def run(coro: Coroutine, final: (Coroutine | None)=None) -> None:
     def sigterm_handler() -> None:
         raise SystemExit()
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
     loop.add_signal_handler(signal.SIGINT, sigint_handler)
     loop.add_signal_handler(signal.SIGTERM, sigterm_handler)
 
     main_task = loop.create_task(coro)
     try:
         loop.run_until_complete(main_task)
-    except (SystemExit, KeyboardInterrupt):
-        pass
+    except KeyboardInterrupt:
+        raise SystemExit("Interrupted by Ctrl+C")
     finally:
         main_task.cancel()
         loop.run_until_complete(asyncio.gather(main_task, return_exceptions=True))

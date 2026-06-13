@@ -107,7 +107,7 @@ class MsdApi:
                 size = reader.get_total_size()
 
             else:
-                async def compressed() -> AsyncGenerator[bytes, None]:
+                async def compressed() -> AsyncGenerator[bytes]:
                     assert make_compressor is not None
                     compressor = make_compressor()  # pylint: disable=not-callable
                     limit = reader.get_chunk_size()
@@ -205,9 +205,9 @@ class MsdApi:
                 return make_json_exception(ex, 400)
             raise
 
-    def __get_remove_incomplete(self, req: Request) -> (bool | None):
+    def __get_remove_incomplete(self, req: Request) -> bool:
         flag: (str | None) = req.query.get("remove_incomplete")
-        return (valid_bool(flag) if flag is not None else None)
+        return (valid_bool(flag) if flag is not None else False)
 
     def __make_write_info(self, name: str, size: int, written: int) -> dict:
         return {"image": {"name": name, "size": size, "written": written}}

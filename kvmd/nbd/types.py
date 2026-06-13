@@ -26,9 +26,9 @@ import dataclasses
 # =====
 @dataclasses.dataclass(frozen=True)
 class NbdImage:
-    size:    int
-    rw:      bool
-    timeout: float
+    url:  str
+    size: int
+    rw:   bool
 
 
 # =====
@@ -37,15 +37,19 @@ class BaseNbdEvent:
 
 
 @dataclasses.dataclass(frozen=True)
-class NbdRemoteEvent(BaseNbdEvent):
-    online: bool
-    msg:    str
+class NbdSetupEvent(BaseNbdEvent):
+    image: NbdImage
 
 
 @dataclasses.dataclass(frozen=True)
 class NbdStartEvent(BaseNbdEvent):
-    image: NbdImage
-    path:  str
+    pass
+
+
+@dataclasses.dataclass(frozen=True)
+class NbdStatusEvent(BaseNbdEvent):
+    online: bool
+    msg:    str
 
 
 @dataclasses.dataclass(frozen=True)
@@ -53,3 +57,18 @@ class NbdStopEvent(BaseNbdEvent):
     src: str
     msg: str
     ok:  bool
+
+
+# =====
+@dataclasses.dataclass(frozen=True)
+class NbdStopped:
+    image:  NbdImage
+    result: NbdStopEvent
+
+
+@dataclasses.dataclass(frozen=True)
+class NbdState:
+    image:   (NbdImage | None) = dataclasses.field(default=None)
+    bound:   str = dataclasses.field(default="")
+    changed: (NbdStatusEvent | None) = dataclasses.field(default=None)
+    stopped: (NbdStopped | None) = dataclasses.field(default=None)

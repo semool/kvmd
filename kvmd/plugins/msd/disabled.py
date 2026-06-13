@@ -24,6 +24,8 @@ import contextlib
 
 from typing import AsyncGenerator
 
+from ...yamlconf import Section
+
 from ... import aiotools
 
 from . import MsdOperationError
@@ -40,7 +42,8 @@ class MsdDisabledError(MsdOperationError):
 
 # =====
 class Plugin(BaseMsd):
-    def __init__(self) -> None:
+    def __init__(self, c: Section) -> None:
+        super().__init__(c)
         self.__notifier = aiotools.AioNotifier()
 
     async def get_state(self) -> dict:
@@ -55,7 +58,7 @@ class Plugin(BaseMsd):
     async def trigger_state(self) -> None:
         self.__notifier.notify()
 
-    async def poll_state(self) -> AsyncGenerator[dict, None]:
+    async def poll_state(self) -> AsyncGenerator[dict]:
         while True:
             await self.__notifier.wait()
             yield (await self.get_state())
@@ -78,13 +81,19 @@ class Plugin(BaseMsd):
         raise MsdDisabledError()
 
     @contextlib.asynccontextmanager
-    async def read_image(self, name: str) -> AsyncGenerator[BaseMsdReader, None]:
+    async def read_image(self, name: str) -> AsyncGenerator[BaseMsdReader]:
         if self is not None:  # XXX: Vulture and pylint hack
             raise MsdDisabledError()
         yield BaseMsdReader()
 
     @contextlib.asynccontextmanager
-    async def write_image(self, name: str, size: int, remove_incomplete: (bool | None)) -> AsyncGenerator[BaseMsdWriter, None]:
+    async def write_image(
+        self,
+        name: str,
+        size: int,
+        remove_incomplete: bool,
+    ) -> AsyncGenerator[BaseMsdWriter]:
+
         if self is not None:  # XXX: Vulture and pylint hack
             raise MsdDisabledError()
         yield BaseMsdWriter()
