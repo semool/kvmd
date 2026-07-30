@@ -1,8 +1,9 @@
+#!/bin/bash
 # ========================================================================== #
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2020  Maxim Devaev <mdevaev@gmail.com>                    #
+#    Copyright (C) 2018-2024  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -20,58 +21,23 @@
 # ========================================================================== #
 
 
-import dataclasses
+set -e
+export LC_ALL=C
 
+if [[ "$(whoami)" != root ]]; then
+	echo "Only root can do that"
+	exit 1
+fi
 
-# =====
-@dataclasses.dataclass(frozen=True)
-class NbdImage:
-    url:    str
-    proto:  str
-    name:   str
-    size:   int
-    mod_ts: float
-    rw:     bool
+if [[ "$1" != --do-the-thing ]]; then
+	echo "Add option '--do-the-thing' if you know what you're doing."
+	echo "  - https://docs.pikvm.org/switch/#firmware-updating"
+	exit 1
+fi
 
-
-# =====
-class BaseNbdEvent:
-    pass
-
-
-@dataclasses.dataclass(frozen=True)
-class NbdSetupEvent(BaseNbdEvent):
-    image: NbdImage
-
-
-@dataclasses.dataclass(frozen=True)
-class NbdStartEvent(BaseNbdEvent):
-    pass
-
-
-@dataclasses.dataclass(frozen=True)
-class NbdStatusEvent(BaseNbdEvent):
-    online: bool
-    msg:    str
-
-
-@dataclasses.dataclass(frozen=True)
-class NbdStopEvent(BaseNbdEvent):
-    src: str
-    msg: str
-    ok:  bool
-
-
-# =====
-@dataclasses.dataclass(frozen=True)
-class NbdStopped:
-    image:  NbdImage
-    result: NbdStopEvent
-
-
-@dataclasses.dataclass(frozen=True)
-class NbdState:
-    image:   (NbdImage | None) = dataclasses.field(default=None)
-    bound:   str = dataclasses.field(default="")
-    changed: (NbdStatusEvent | None) = dataclasses.field(default=None)
-    stopped: (NbdStopped | None) = dataclasses.field(default=None)
+curl \
+		--unix-socket=/run/kvmd/kvmd.sock \
+		--silent \
+		-X POST \
+	'http://localhost/switch/reset?unit=0&bootloader=1'
+echo

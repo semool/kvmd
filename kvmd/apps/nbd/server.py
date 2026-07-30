@@ -20,9 +20,9 @@
 # ========================================================================== #
 
 
-import os
-import subprocess
 import dataclasses
+
+from typing import Any
 
 from aiohttp.web import Request
 from aiohttp.web import Response
@@ -30,9 +30,7 @@ from aiohttp.web import WebSocketResponse
 
 from ...logging import get_logger
 
-from ... import tools
 from ... import aiotools
-from ... import aioproc
 
 from ...htserver import exposed_http
 from ...htserver import exposed_ws
@@ -40,7 +38,7 @@ from ...htserver import make_json_response
 from ...htserver import WsSession
 from ...htserver import HttpServer
 
-from ...nbd import NbdController
+from ...nbd.controller import NbdController
 
 
 # =====
@@ -51,15 +49,14 @@ class NbdServer(HttpServer):
     def __init__(
         self,
         device_path: str,
-        disconnect_cmd: list[str],
+        use_blkroset: bool,
     ) -> None:
 
         super().__init__()
 
         self.__device_path = device_path
-        self.__disconnect_cmd = disconnect_cmd
 
-        self.__ctl = NbdController(device_path)
+        self.__ctl = NbdController(device_path, use_blkroset)
 
     # ===== HTTP
 
@@ -71,14 +68,28 @@ class NbdServer(HttpServer):
     async def __remotes_handler(self, _: Request) -> Response:
         return make_json_response(self.__ctl.get_remotes())
 
+    @exposed_http("POST", "/explore")
+    async def __explore_handler(self, req: Request) -> Response:
+        image = await self.__ctl.explore(**(await self.__get_params(req)))
+        return make_json_response({
+            "image": dataclasses.asdict(image),
+        })
+
     @exposed_http("POST", "/bind")
     async def __bind_handler(self, req: Request) -> Response:
-        await self.__ctl.bind(**dict(req.query))
-        return make_json_response({})
+        image = await self.__ctl.bind(**(await self.__get_params(req)))
+        return make_json_response({
+            "image":  dataclasses.asdict(image),
+        })
+
+    async def __get_params(self, req: Request) -> dict[str, Any]:
+        q_params = dict(req.query)
+        p_params = await req.post()
+        return {**q_params, **p_params}
 
     @exposed_http("POST", "/unbind")
     async def __unbind_handler(self, _: Request) -> Response:
-        self.__ctl.unbind()
+        await self.__ctl.unbind()
         return make_json_response({})
 
     # ===== WEBSOCKET
@@ -98,7 +109,7 @@ class NbdServer(HttpServer):
     # ===== SYSTEM STUFF
 
     async def _init_app(self) -> None:
-        await self.__force_disconnect()
+        await self.__ctl.force_disconnect()
         aiotools.create_deadly_task("Controller", self.__controller())
         self._add_exposed(self)
 
@@ -110,7 +121,7 @@ class NbdServer(HttpServer):
 
     async def _on_cleanup(self) -> None:
         logger = get_logger(0)
-        await self.__force_disconnect()
+        await self.__ctl.force_disconnect()
         logger.info("On-Cleanup complete")
 
     # ===== SYSTEM TASKS
@@ -120,20 +131,3 @@ class NbdServer(HttpServer):
         async for (event, state) in self.__ctl.poll_state():
             logger.info("NBD-EVENT: %s", event)
             await self._broadcast_ws_event(self.__EV_NBD, dataclasses.asdict(state))
-
-    async def __force_disconnect(self) -> bool:
-        logger = get_logger()
-        cmd = [
-            part.format(device=os.path.realpath(self.__device_path))
-            for part in self.__disconnect_cmd
-        ]
-        logger.info("Forced disconnecting NBD %s: %s", self.__device_path, tools.cmdfmt(cmd))
-        try:
-            proc = await aioproc.log_process(cmd, logger)
-            if proc.returncode != 0:
-                assert proc.returncode is not None
-                raise subprocess.CalledProcessError(proc.returncode, cmd)
-        except Exception as ex:
-            logger.error("Can't forcibly disconnect NBD: %s", tools.efmt(ex))
-            return False
-        return True

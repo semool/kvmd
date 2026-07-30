@@ -55,6 +55,7 @@ from ..validators.auth import valid_users_list
 from ..validators.auth import valid_expire
 
 from ..validators.os import valid_abs_path
+from ..validators.os import valid_printable_filename
 from ..validators.os import valid_unix_mode
 from ..validators.os import valid_options
 from ..validators.os import valid_command
@@ -266,6 +267,9 @@ def make_config_scheme() -> dict:
             "kvmd": {
                 "timeout": Option(5.0, type=valid_float_f01),
             },
+            "nbd": {
+                "timeout": Option(5.0, type=valid_float_f01),
+            },
             "pst": {
                 "timeout": Option(5.0, type=valid_float_f01),
             },
@@ -296,7 +300,7 @@ def make_config_scheme() -> dict:
                 "usc": {
                     "users":       Option([], type=valid_users_list),  # PiKVM username has a same regex as a UNIX username
                     "groups":      Option([], type=valid_users_list),  # groupname has a same regex as a username
-                    "kvmd_users":  Option([], type=valid_users_list),  # Internal users
+                    "kvmd_users":  Option(["root"], type=valid_users_list),  # Internal users
                     "kvmd_groups": Option(["kvmd-selfauth"], type=valid_users_list),  # Internal groups
                 },
 
@@ -513,7 +517,7 @@ def make_config_scheme() -> dict:
             "max_power":      Option(250,    type=valid_number.mk(min=50, max=500)),
             "remote_wakeup":  Option(True,   type=valid_bool),
 
-            "udc":        Option("",     type=valid_stripped_string),
+            "udc":        Option("",     type=valid_printable_filename, if_empty=""),
             "endpoints":  Option(9,      type=valid_int_f0),
             "init_delay": Option(3.0,    type=valid_float_f01),
 
@@ -680,8 +684,8 @@ def make_config_scheme() -> dict:
                                             " referer='%{Referer}i'; user_agent='%{User-Agent}i'"),
             },
 
-            "device":         Option("/dev/kvmd-nbd", type=valid_abs_path, unpack_as="device_path"),
-            "disconnect_cmd": Option(["/usr/bin/nbd-client", "-d", "{device}"], type=valid_command),
+            "device":       Option("/dev/kvmd-nbd", type=valid_abs_path),
+            "use_blkroset": Option(False, type=valid_bool),
         },
 
         "ipmi": {

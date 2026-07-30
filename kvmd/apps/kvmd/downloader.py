@@ -2,7 +2,7 @@
 #                                                                            #
 #    KVMD - The main PiKVM daemon.                                           #
 #                                                                            #
-#    Copyright (C) 2020  Maxim Devaev <mdevaev@gmail.com>                    #
+#    Copyright (C) 2018-2024  Maxim Devaev <mdevaev@gmail.com>               #
 #                                                                            #
 #    This program is free software: you can redistribute it and/or modify    #
 #    it under the terms of the GNU General Public License as published by    #
@@ -21,57 +21,54 @@
 
 
 import dataclasses
+import contextlib
+
+from typing import Callable
+from typing import AsyncGenerator
+
+import aiohttp
+
+from ... import htclient
 
 
 # =====
 @dataclasses.dataclass(frozen=True)
-class NbdImage:
-    url:    str
-    proto:  str
-    name:   str
-    size:   int
-    mod_ts: float
-    rw:     bool
+class DownloadingFile:
+    name: str
+    size: int
+    read: Callable[[int], AsyncGenerator[bytes]]
 
 
-# =====
-class BaseNbdEvent:
-    pass
+@contextlib.asynccontextmanager
+async def download(
+    url: str,
+    verify: bool,
+    timeout: float,
+    read_timeout: float,
+    user_agent: str="",
+) -> AsyncGenerator[DownloadingFile]:
 
+    async with aiohttp.ClientSession(
+        headers={aiohttp.hdrs.USER_AGENT: htclient.make_user_agent(user_agent)},
+        timeout=aiohttp.ClientTimeout(
+            connect=timeout,
+            sock_connect=timeout,
+            sock_read=read_timeout,
+        ),
+    ) as session:
 
-@dataclasses.dataclass(frozen=True)
-class NbdSetupEvent(BaseNbdEvent):
-    image: NbdImage
+        async with session.get(url, verify_ssl=verify) as resp:  # type: ignore
+            htclient.raise_not_200(resp)
 
+            name = htclient.get_filename(resp)
 
-@dataclasses.dataclass(frozen=True)
-class NbdStartEvent(BaseNbdEvent):
-    pass
+            size = resp.content_length
+            if size is None or size < 0:
+                raise aiohttp.ClientError("No Content-Length found")
 
+            # Make it unified for the future API
+            async def read(chunk_size: int) -> AsyncGenerator[bytes]:
+                async for chunk in resp.content.iter_chunked(chunk_size):
+                    yield chunk
 
-@dataclasses.dataclass(frozen=True)
-class NbdStatusEvent(BaseNbdEvent):
-    online: bool
-    msg:    str
-
-
-@dataclasses.dataclass(frozen=True)
-class NbdStopEvent(BaseNbdEvent):
-    src: str
-    msg: str
-    ok:  bool
-
-
-# =====
-@dataclasses.dataclass(frozen=True)
-class NbdStopped:
-    image:  NbdImage
-    result: NbdStopEvent
-
-
-@dataclasses.dataclass(frozen=True)
-class NbdState:
-    image:   (NbdImage | None) = dataclasses.field(default=None)
-    bound:   str = dataclasses.field(default="")
-    changed: (NbdStatusEvent | None) = dataclasses.field(default=None)
-    stopped: (NbdStopped | None) = dataclasses.field(default=None)
+            yield DownloadingFile(name, size, read)

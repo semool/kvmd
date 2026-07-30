@@ -30,7 +30,7 @@ RUN \
 		m4 \
 		vim \
 		git \
-		libjpeg \
+		libjpeg-turbo \
 		libevent \
 		libutil-linux \
 		libbsd \
@@ -48,9 +48,8 @@ RUN \
 		python-aiohttp \
 		python-aiofiles \
 		python-async-lru \
+		python-bcrypt \
 		python-passlib \
-		# See kvmd/crypto.py
-		# python-bcrypt \
 		python-pyotp \
 		python-qrcode \
 		python-pyserial \
@@ -71,6 +70,8 @@ RUN \
 		libxkbcommon \
 		python-hidapi \
 		python-ldap \
+		python-pysmbc \
+		python-paramiko \
 		python-zstandard \
 		libgpiod \
 		freetype2 \

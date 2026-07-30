@@ -27,10 +27,13 @@ from typing import Final
 from typing import Callable
 from typing import Any
 
+import aiofiles.os
+
 from ...logging import get_logger
 
 from ...inotify import Inotify
 
+from ... import tools
 from ... import aiotools
 from ... import usb
 
@@ -38,8 +41,7 @@ from ...yamlconf import Section
 from ...yamlconf import Option
 
 from ...validators.basic import valid_float_f01
-from ...validators.basic import valid_stripped_string
-from ...validators.basic import valid_stripped_string_not_empty
+from ...validators.os import valid_printable_filename
 
 from . import BaseUserGpioDriver
 
@@ -67,13 +69,13 @@ class Plugin(BaseUserGpioDriver):
     @classmethod
     def get_plugin_options(cls) -> dict[str, Option]:
         return {
-            "udc":        Option("",  type=valid_stripped_string),
+            "udc":        Option("",  type=valid_printable_filename, if_empty=""),
             "init_delay": Option(3.0, type=valid_float_f01),
         }
 
     @classmethod
     def get_pin_validator(cls) -> Callable[[Any], Any]:
-        return valid_stripped_string_not_empty
+        return valid_printable_filename.mk(name="OTG target")
 
     async def prepare(self) -> None:
         self.__udc = usb.find_udc(self.__udc)
@@ -85,7 +87,7 @@ class Plugin(BaseUserGpioDriver):
             try:
                 while True:
                     self._notifier.notify()
-                    if os.path.isfile(self.__udc_path):
+                    if (await aiofiles.os.path.isfile(self.__udc_path)):
                         break
                     await asyncio.sleep(5)
 
@@ -104,48 +106,69 @@ class Plugin(BaseUserGpioDriver):
                 await asyncio.sleep(1)
 
     async def read(self, pin: str) -> bool:
+        tools.check_name(pin)
         if pin == "udc":
-            return self.__is_udc_enabled()
-        return os.path.exists(self.__get_fdest_path(pin))
+            return (await self.__is_udc_enabled())
+        return (await aiofiles.os.path.exists(self.__get_fdest_path(pin)))
 
     async def write(self, pin: str, state: bool) -> None:
+        tools.check_name(pin)
+        if pin == "udc":
+            await self.__write_udc(state)
+        else:
+            await self.__write_function(pin, state)
+
+    async def __write_udc(self, state: bool) -> None:
         async with self.__lock:
-            if (await self.read(pin)) == state:
+            enabled = await self.__is_udc_enabled()
+            if enabled == state:
                 return
-            if pin == "udc":
-                if state:
-                    self.__recreate_profile()
-                self.__set_udc_enabled(state)
+            if state:
+                if (await self.__recreate_profile()):
+                    await self.__set_udc_enabled(True)
             else:
-                if self.__is_udc_enabled():
-                    self.__set_udc_enabled(False)
-                try:
-                    if state:
-                        os.symlink(self.__get_fsrc_path(pin), self.__get_fdest_path(pin))
-                    else:
-                        os.unlink(self.__get_fdest_path(pin))
-                except (FileNotFoundError, FileExistsError):
-                    pass
-                finally:
-                    self.__recreate_profile()
+                await self.__set_udc_enabled(False)
+
+    async def __write_function(self, func: str, state: bool) -> None:
+        async with self.__lock:
+            enabled = await aiofiles.os.path.exists(self.__get_fdest_path(func))
+            if enabled == state:
+                return
+            if (await self.__is_udc_enabled()):
+                await self.__set_udc_enabled(False)
+            try:
+                if state:
+                    await aiofiles.os.symlink(
+                        self.__get_fsrc_path(func),
+                        self.__get_fdest_path(func),
+                    )
+                else:
+                    await aiofiles.os.unlink(self.__get_fdest_path(func))
+            except (FileNotFoundError, FileExistsError):
+                pass
+            finally:
+                if (await self.__recreate_profile()):
                     try:
                         await asyncio.sleep(self.__init_delay)
                     finally:
-                        self.__set_udc_enabled(True)
+                        await self.__set_udc_enabled(True)
 
-    def __recreate_profile(self) -> None:
+    async def __recreate_profile(self) -> bool:
         # XXX: See pikvm/pikvm#1235
         # After unbind and bind, the gadgets stop working,
         # unless we recreate their links in the profile.
         # Some kind of kernel bug.
-        for func in os.listdir(self.__profile_path):
+        has_funcs = False
+        for func in (await aiofiles.os.listdir(self.__profile_path)):
             path = self.__get_fdest_path(func)
-            if os.path.islink(path):
+            if (await aiofiles.os.path.islink(path)):
+                has_funcs = True
                 try:
-                    os.unlink(path)
-                    os.symlink(self.__get_fsrc_path(func), path)
+                    await aiofiles.os.unlink(path)
+                    await aiofiles.os.symlink(self.__get_fsrc_path(func), path)
                 except (FileNotFoundError, FileNotFoundError):
                     pass
+        return has_funcs
 
     def __get_fsrc_path(self, func: str) -> str:
         return os.path.join(self.__functions_path, func)
@@ -153,13 +176,13 @@ class Plugin(BaseUserGpioDriver):
     def __get_fdest_path(self, func: str) -> str:
         return os.path.join(self.__profile_path, func)
 
-    def __set_udc_enabled(self, enabled: bool) -> None:
-        with open(self.__udc_path, "w") as file:
-            file.write(self.__udc if enabled else "\n")
+    async def __set_udc_enabled(self, enabled: bool) -> None:
+        udc = (self.__udc if enabled else "\n")
+        await aiotools.write_file(self.__udc_path, udc)
 
-    def __is_udc_enabled(self) -> bool:
-        with open(self.__udc_path) as file:
-            return bool(file.read().strip())
+    async def __is_udc_enabled(self) -> bool:
+        udc = await aiotools.read_file(self.__udc_path)
+        return bool(udc.strip())
 
     def __str__(self) -> str:
         return f"GPIO({self._instance_name})"
