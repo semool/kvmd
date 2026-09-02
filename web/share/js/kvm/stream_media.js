@@ -26,7 +26,7 @@
 import {tools, $} from "../tools.js";
 
 
-export function MediaStreamer(__setActive, __setInactive, __setInfo, __organizeHook) {
+export function MediaStreamer(__setActive, __setInactive, __setInfo, __watchHook, __organizeHook) {
 	var self = this;
 
 	/************************************************************************/
@@ -54,6 +54,7 @@ export function MediaStreamer(__setActive, __setInactive, __setInfo, __organizeH
 		tools.feature.setEnabled($("stream-multimedia"), false);
 		tools.feature.setEnabled($("stream-audio"), false);
 		tools.feature.setEnabled($("stream-mic"), false);
+		tools.feature.setEnabled($("stream-mic-raw"), false);
 		tools.feature.setEnabled($("stream-camera"), false);
 	};
 
@@ -61,8 +62,9 @@ export function MediaStreamer(__setActive, __setInactive, __setInfo, __organizeH
 
 	self.setOrientation = function(orient) { __orient = orient; };
 	self.setAudioVolume = function(volume) {}; // eslint-disable-line no-unused-vars
-	self.setMicEnabled = function(enabled) {}; // eslint-disable-line no-unused-vars
-	self.setCameraEnabled = function(enabled) {}; // eslint-disable-line no-unused-vars
+	self.setMicDevice = function(mic) {}; // eslint-disable-line no-unused-vars
+	self.setMicRaw = function(raw) {}; // eslint-disable-line no-unused-vars
+	self.setCameraDevice = function(camera) {}; // eslint-disable-line no-unused-vars
 
 	self.getName = () => "Direct H.264";
 	self.getMode = () => "media";

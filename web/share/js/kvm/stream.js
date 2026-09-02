@@ -43,7 +43,7 @@ export function Streamer() {
 	var __res = {"width": 640, "height": 480};
 
 	var __init__ = function() {
-		__streamer = new MjpegStreamer(__setActive, __setInactive, __setInfo, __organizeHook);
+		__streamer = new MjpegStreamer(__setActive, __setInactive, __setInfo, __watchHook, __organizeHook);
 
 		$("stream-led").title = "No stream from PiKVM";
 
@@ -84,15 +84,32 @@ export function Streamer() {
 			let enabled = $("stream-multimedia-switch").checked;
 			tools.el.setEnabled($("stream-audio-volume-slider"), enabled);
 			tools.el.setEnabled($("stream-mic-switch"), enabled);
+			tools.el.setEnabled($("stream-mic-raw-switch"), enabled);
 			tools.el.setEnabled($("stream-camera-switch"), enabled);
 			__applyAudioVolume();
 			__applyMicEnabled();
 			__applyCameraEnabled();
+			tools.storage.setBool("stream.multimedia", enabled);
 		}, false);
 
 		tools.storage.bindSimpleSlider($("stream-audio-volume-slider"), "stream.audio", 0, 100, 1, 100, __applyAudioVolume);
-		tools.storage.bindSimpleSwitch($("stream-mic-switch"), "stream.mic", false, __applyMicEnabled);
-		tools.storage.bindSimpleSwitch($("stream-camera-switch"), "stream.camera", false, __applyCameraEnabled);
+
+		tools.storage.bindSimpleSwitch($("stream-mic-raw-switch"), "stream.mic.raw", false, __applyMicEnabled);
+
+		for (let [input, apply_cb] of [["mic", __applyMicEnabled], ["camera", __applyCameraEnabled]]) {
+			tools.storage.bindSimpleSwitch($(`stream-${input}-switch`), `stream.${input}`, false, apply_cb);
+
+			let el = $(`stream-${input}-selector`);
+			tools.selector.addOption(el, `\u2500 Default ${input} \u2500`, ".__default__");
+
+			let id = tools.storage.get(`stream.${input}.device.id`, ".__default__");
+			if (id !== ".__default__") {
+				let name = tools.storage.get(`stream.${input}.device.name`, "???");
+				tools.selector.addOption(el, name, id, true);
+			}
+
+			el.onchange = apply_cb;
+		}
 
 		tools.el.setOnClick($("stream-screenshot-button"), __clickScreenshotButton);
 		tools.el.setOnClick($("stream-reset-button"), __clickResetButton);
@@ -116,13 +133,18 @@ export function Streamer() {
 	};
 
 	var __applyMicEnabled = function() {
-		let mm = $("stream-multimedia-switch").checked;
-		__streamer.setMicEnabled(mm && $("stream-mic-switch").checked);
+		let enabled = ($("stream-multimedia-switch").checked && $("stream-mic-switch").checked);
+		let el = $("stream-mic-selector");
+		tools.el.setEnabled(el, enabled);
+		__streamer.setMicRaw($("stream-mic-raw-switch").checked);
+		__streamer.setMicDevice(enabled ? el.value : null);
 	};
 
 	var __applyCameraEnabled = function() {
-		let mm = $("stream-multimedia-switch").checked;
-		__streamer.setCameraEnabled(mm && $("stream-camera-switch").checked);
+		let enabled = ($("stream-multimedia-switch").checked && $("stream-camera-switch").checked);
+		let el = $("stream-camera-selector");
+		tools.el.setEnabled(el, enabled);
+		__streamer.setCameraDevice(enabled ? el.value : null);
 	};
 
 	var __isStreamRequired = function() {
@@ -143,6 +165,37 @@ export function Streamer() {
 	var __organizeHook = function() {
 		let geo = self.getGeometry();
 		wm.setAspectRatio($("stream-window"), geo.width, geo.height);
+	};
+
+	var __first_watch = true;
+	var __watchHook = function() {
+		if (__first_watch) {
+			__first_watch = false;
+			let el = $("stream-multimedia-switch");
+			if (!el.checked && tools.storage.getBool("stream.multimedia")) {
+				let text = (
+					"In the previous session, you used the multimedia features of PiKVM.<br>"
+					+ "Do you want to continue with the same settings?<br>"
+					+ "<br>"
+					+ "Due to browser limitations, this requires explicit confirmation."
+					+ "<ul><li><b>OK</b> - continue with multimedia.</li><li><b>Cancel</b> - forget about it.</li></ul>"
+				);
+				wm.confirm(text).then(function(ok) {
+					if (ok) {
+						if (!el.checked) {
+							el.click();
+						}
+						setTimeout(function() {
+							__applyAudioVolume();
+							__applyMicEnabled();
+							__applyCameraEnabled();
+						}, 100);
+					} else {
+						tools.storage.setBool("stream.multimedia", false);
+					}
+				});
+			}
+		}
 	};
 
 	self.ensureDeps = function(cb) {
@@ -338,7 +391,7 @@ export function Streamer() {
 			case "janus": cls = JanusStreamer; break;
 			case "media": cls = MediaStreamer; break;
 		}
-		__streamer = new cls(__setActive, __setInactive, __setInfo, __organizeHook);
+		__streamer = new cls(__setActive, __setInactive, __setInfo, __watchHook, __organizeHook);
 		if (__isStreamRequired()) {
 			__streamer.ensureStream((__state && __state.streamer !== undefined) ? __state.streamer : null);
 			__applyAudioVolume();

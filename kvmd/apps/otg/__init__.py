@@ -119,10 +119,11 @@ class _GadgetConfig:
 
         _mkdir(meta_path)
 
-    def add_camera(
+    def add_camera(  # pylint: disable=too-many-locals
         self,
         starter: list[str],
         start: bool,
+        safe: bool,
         ct_mask: int,
         pu_mask: int,
     ) -> None:
@@ -159,24 +160,33 @@ class _GadgetConfig:
 
         _mkdir(join(func_path, "streaming/mjpeg/m"))
         for (width, height, framerates) in [  # TODO: Make it configurable
-            # (1920, 1080, [30]),
-            # (1280, 720,  [30]),
-            # (800,  600,  [30]),
-            (640,  480,  [30]),
-            # (640,  360,  [30]),
-            # (320,  240,  [30]),
-            # (320,  180,  [30]),
+            # (1920, 1080, [30, 24, 20, 15, 10, 5]),
+            (1280, 720,  [30, 24, 20, 15, 10, 5]),
+            (1024, 768,  [30, 24, 20, 15, 10, 5]),
+            (1024, 576,  [30, 24, 20, 15, 10, 5]),
+            (960,  720,  [30, 24, 20, 15, 10, 5]),
+            # (864,  480,  [30, 24, 20, 15, 10, 5]),
+            (800,  600,  [30, 24, 20, 15, 10, 5]),
+            # (800,  448,  [30, 24, 20, 15, 10, 5]),
+            (640,  480,  [30, 24, 20, 15, 10, 5]),
+            (640,  360,  [30, 24, 20, 15, 10, 5]),
+            (320,  240,  [30, 24, 20, 15, 10, 5]),
+            (320,  180,  [30, 24, 20, 15, 10, 5]),
+            # (176,  144,  [30, 24, 20, 15, 10, 5]),
+            # (160,  120,  [30, 24, 20, 15, 10, 5]),
+            # (160,  90,   [30, 24, 20, 15, 10, 5]),
         ]:
-            if framerates:
-                fmt_path = join(func_path, f"streaming/mjpeg/m/{height}p")
-                _mkdir(fmt_path)
-                _write(join(fmt_path, "wWidth"), width)
-                _write(join(fmt_path, "wHeight"), height)
-                _write(join(fmt_path, "dwMaxVideoFrameBufferSize"), width * height)  # Should be fine
-                _write(join(fmt_path, "dwFrameInterval"), "\n".join(
-                    str(math.floor(1 / fps * 10_000_000))  # 30 -> 333333, 100ns units
-                    for fps in framerates
-                ))
+            if not framerates or (safe and width > 640):
+                continue
+            fmt_path = join(func_path, f"streaming/mjpeg/m/{width}x{height}")
+            _mkdir(fmt_path)
+            _write(join(fmt_path, "wWidth"), width)
+            _write(join(fmt_path, "wHeight"), height)
+            _write(join(fmt_path, "dwMaxVideoFrameBufferSize"), width * height)  # Should be fine
+            _write(join(fmt_path, "dwFrameInterval"), "\n".join(
+                str(math.floor(1 / fps * 10_000_000))  # 30 -> 333333, 100ns units
+                for fps in framerates
+            ))
 
         path = join(func_path, "streaming/header/h")
         _mkdir(path)
@@ -193,9 +203,10 @@ class _GadgetConfig:
             (ct_mask, 3, "control/terminal/camera/default/bmControls"),
             (pu_mask, 2, "control/processing/default/bmControls"),
         ]:
-            _write(join(func_path, path), "\n".join(map(str, mask.to_bytes(mask_len, "big"))))
+            _write(join(func_path, path), "\n".join(map(str, mask.to_bytes(mask_len, "little"))))
 
-        _write(join(func_path, "streaming_maxpacket"), 2048)  # Maximum for USB 2.0
+        _write(join(func_path, "streaming_maxpacket"), 1024)
+        _write(join(func_path, "streaming_interval"), 4)
 
         self.__setup_function(func, "Camera", 2, starter, start)  # TODO: Check eps number
 
@@ -460,7 +471,7 @@ def _cmd_start(config: Section) -> None:  # pylint: disable=too-many-statements,
 
     if cod.camera.enabled:
         logger.info("===== Camera =====")
-        gc.add_camera(["camera"], cod.camera.start, cod.camera.controls.ct_mask, cod.camera.controls.pu_mask)
+        gc.add_camera(["camera"], cod.camera.start, cod.camera.safe, cod.camera.controls.ct_mask, cod.camera.controls.pu_mask)
 
     logger.info("===== Preparing complete =====")
 

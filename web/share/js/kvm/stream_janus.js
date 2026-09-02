@@ -24,13 +24,14 @@
 
 
 import {tools, $} from "../tools.js";
+import {VuMeter} from "./vu.js";
 import {wm} from "../wm.js";
 
 
 var _Janus = null;
 
 
-export function JanusStreamer(__setActive, __setInactive, __setInfo, __organizeHook) {
+export function JanusStreamer(__setActive, __setInactive, __setInfo, __watchHook, __organizeHook) {
 
 	var self = this;
 
@@ -50,12 +51,15 @@ export function JanusStreamer(__setActive, __setInactive, __setInfo, __organizeH
 
 	var __has_audio = false;
 	var __use_audio = 0; // Volume
+	var __audio_vu = null;
 
 	var __has_mic = false;
-	var __use_mic = false;
+	var __use_mic = null;
+	var __use_mic_raw = false;
+	var __mic_vu = null;
 
 	var __has_camera = false;
-	var __use_camera = false;
+	var __use_camera = null;
 	var __camera_req = null;
 
 	var __orient = 0;
@@ -70,7 +74,11 @@ export function JanusStreamer(__setActive, __setInactive, __setInfo, __organizeH
 		tools.feature.setEnabled($("stream-multimedia"), false);
 		tools.feature.setEnabled($("stream-audio"), false);
 		tools.feature.setEnabled($("stream-mic"), false);
+		tools.feature.setEnabled($("stream-mic-raw"), false);
 		tools.feature.setEnabled($("stream-camera"), false);
+
+		__audio_vu = new VuMeter($("stream-audio-vu-progress"));
+		__mic_vu = new VuMeter($("stream-mic-vu-progress"));
 	};
 
 	/************************************************************************/
@@ -94,18 +102,95 @@ export function JanusStreamer(__setActive, __setInactive, __setInfo, __organizeH
 		}
 	};
 
-	self.setMicEnabled = function(enabled) {
-		let prev = __use_mic;
-		__use_mic = enabled;
-		if (__has_mic && (prev !== __use_mic)) {
+	var __setDevice = function(el, input, id) {
+		el.value = id;
+		tools.storage.set(`stream.${input}.device.id`, id);
+		let name = "\u2500 Unknown yet \u2500";
+		try {
+			name = el.options[el.selectedIndex].innerText;
+		} catch {}
+		tools.storage.set(`stream.${input}.device.name`, name);
+	};
+
+	var __refillDevices = function(input, id, apply_cb) {
+		let el = $(`stream-${input}-selector`);
+		if (id === ".__default__") {
+			__setDevice(el, input, id);
+			apply_cb(id);
+		}
+		let av = (input === "mic" ? "audio" : "video");
+		let turn = (el.__janus_turn || 0) + 1; // Drop previous parallel results
+		el.__janus_turn = turn;
+		_Janus.listDevices(function(devices) {
+			if (turn >= el.__janus_turn) {
+				el.options.length = 1;
+				let found = false;
+				for (let dev of devices) {
+					if (dev.kind === av + "input") {
+						tools.selector.addOption(el, dev.label, dev.deviceId);
+						if (dev.deviceId === id) {
+							found = true;
+						}
+					}
+				}
+				if (!found && id !== ".__default__") {
+					id = ".__default__";
+					found = true;
+				}
+				if (found) {
+					__setDevice(el, input, id);
+					apply_cb(id);
+				}
+			}
+		}, {[av]: true});
+	};
+
+	self.setMicRaw = function(raw) {
+		if (__use_mic_raw !== !!raw) {
+			__use_mic_raw = !!raw;
+			if (__has_mic && __use_mic) {
+				__destroyJanus(); // The constraints are negotiated with the offer
+			}
+		}
+	};
+
+	self.setMicDevice = function(mic, reload=false) {
+		// The choice is remembered even before the features are known: this happens
+		// right after switching the video mode, when the UI applies its state to the
+		// fresh streamer. Only the restart needs the working session
+		if (__use_mic !== mic) {
+			if (mic) {
+				__refillDevices("mic", mic, function(id) {
+					__use_mic = id;
+					if (__has_mic) {
+						__destroyJanus();
+					}
+				});
+			} else {
+				__use_mic = null;
+			}
+			reload = true;
+		}
+		if (reload && __has_mic) {
 			__destroyJanus();
 		}
 	};
 
-	self.setCameraEnabled = function(enabled) {
-		let prev = __use_camera;
-		__use_camera = enabled;
-		if (__has_camera && (prev !== __use_camera)) {
+	self.setCameraDevice = function(camera, reload=false) {
+		if (__use_camera !== camera) {
+			if (camera) {
+				__refillDevices("camera", camera, function(id) {
+					__use_camera = id;
+					if (__has_camera) {
+						__destroyJanus();
+					}
+				});
+			} else {
+				__use_camera = null;
+			}
+			reload = true;
+		}
+		if (reload && __has_camera) {
 			__destroyJanus();
 		}
 	};
@@ -247,6 +332,8 @@ export function JanusStreamer(__setActive, __setInactive, __setInfo, __organizeH
 	};
 
 	var __destroyJanus = function() {
+		__audio_vu.detach();
+		__mic_vu.detach();
 		if (__janus !== null) {
 			__janus.destroy();
 		}
@@ -342,6 +429,7 @@ export function JanusStreamer(__setActive, __setInactive, __setInfo, __organizeH
 						let f = msg.result.features;
 						tools.feature.setEnabled($("stream-audio"), (__has_audio = f.audio));
 						tools.feature.setEnabled($("stream-mic"), (__has_mic = f.mic));
+						tools.feature.setEnabled($("stream-mic-raw"), (__has_mic && !tools.browser.is_safari));
 						tools.feature.setEnabled($("stream-camera"), (__has_camera = (f.camera && f.camera.enabled)));
 						tools.feature.setEnabled($("stream-multimedia"), (__has_audio || __has_mic || __has_camera));
 						__ice = f.ice;
@@ -380,7 +468,18 @@ export function JanusStreamer(__setActive, __setInactive, __setInfo, __organizeH
 					__logInfo("Handling SDP:", jsep);
 
 					let audio = (__has_audio && !!__use_audio);
-					let mic = (__has_mic && __use_mic);
+
+					let mic = null;
+					if (__has_mic && __use_mic) {
+						mic = {};
+						if (__use_mic !== ".__default__") {
+							mic["deviceId"] = {"exact": __use_mic};
+						}
+						if (tools.browser.is_safari && __use_mic_raw) {
+							mic["noiseSuppression"] = false;
+							mic["autoGainControl"] = false;
+						}
+					}
 
 					let camera = null;
 					if (__camera_req !== null) {
@@ -393,6 +492,9 @@ export function JanusStreamer(__setActive, __setInactive, __setInfo, __organizeH
 							"height": {"min": h, "ideal": h, "max": h},
 							"frameRate": {"ideal": __camera_req.fps, "max": 30},
 						};
+						if (__use_camera !== ".__default__") {
+							camera["deviceId"] = {"exact": __use_camera};
+						}
 					}
 
 					let tracks = [{"type": "video", "capture": camera, "recv": true, "add": true}];
@@ -419,6 +521,20 @@ export function JanusStreamer(__setActive, __setInactive, __setInfo, __organizeH
 						},
 
 						"error": function(error) {
+							let restart = function() {
+								try {
+									if (error?.name === "OverconstrainedError") {
+										if (__has_mic && __use_mic) {
+											self.setMicDevice(".__default__", true);
+										}
+										if (__has_camera && __use_camera) {
+											self.setCameraDevice(".__default__", true);
+										}
+									}
+								} finally {
+									__destroyJanus();
+								}
+							};
 							__logInfo("Error on SDP handling:", error);
 							__setInfo(false, false, error);
 							if (["NotAllowedError", "SecurityError"].includes(error?.name)) {
@@ -435,32 +551,47 @@ export function JanusStreamer(__setActive, __setInactive, __setInfo, __organizeH
 									html += " Please unlock it (check the top left corner in the address bar)";
 									html += " and press <b>OK</b> to try again.";
 								}
-								wm.error(html, error).then(__destroyJanus);
+								wm.error(html, error).then(restart);
 							} else {
-								__destroyJanus();
+								restart();
 							}
 						},
 					});
 				}
 			},
 
-			"onlocaltrack": function(track, added) {
-				// https://bugzilla.mozilla.org/show_bug.cgi?id=1831521
+			"onlocaltrack": async function(track, added) {
 				if (added && track.kind === "video") {
-					if ("contentHint" in track) { // WebKit
-						__logInfo("Installing contentHint=detail:", track);
-						track.contentHint = "detail";
-					}
-					if (__handle?.webrtcStuff?.pc) { // Firefox
+					track.contentHint = "detail"; // Webkit
+					if (__handle?.webrtcStuff?.pc) {
 						for (let sender of __handle.webrtcStuff.pc.getSenders()) {
 							if (sender.track === track) {
-								__logInfo("Installing degradationPreference=maintain-resolution:", track);
+								if (tools.browser.is_mobile) {
+									try {
+										__logInfo("Patching camera track for auto-rotate ...");
+										let s_track = _makeSmartCameraTrack(track, __camera_req.resolution);
+										s_track.contentHint = "detail";
+										sender.replaceTrack(s_track);
+									} catch (ex) {
+										__logError("Can't patch camera track:", ex);
+									}
+								}
+
+								// Firefox doesn't support contentHint but there is another hack
+								//   - https://bugzilla.mozilla.org/show_bug.cgi?id=1831521
 								let params = sender.getParameters();
 								params.degradationPreference = "maintain-resolution";
 								sender.setParameters(params);
 								break;
 							}
 						}
+					}
+				}
+				if (track.kind === "audio") {
+					if (added) {
+						__mic_vu.attach(track);
+					} else {
+						__mic_vu.detach();
 					}
 				}
 			},
@@ -480,6 +611,13 @@ export function JanusStreamer(__setActive, __setInactive, __setInfo, __organizeH
 					}
 				} else if (!added && reason === "ended") {
 					__removeTrack(track);
+				}
+				if (reason === "created" && track.kind === "audio") {
+					if (added) {
+						__audio_vu.attach(track);
+					} else {
+						__audio_vu.detach();
+					}
 				}
 			},
 
@@ -572,14 +710,15 @@ export function JanusStreamer(__setActive, __setInactive, __setInfo, __organizeH
 	var __sendWatch = function() {
 		if (__handle) {
 			let audio = (__has_audio && !!__use_audio);
-			let mic = (__has_mic && __use_mic);
+			let mic = (__has_mic && __use_mic ? __use_mic : null);
 			__logInfo(`Sending WATCH(orient=${__orient}, audio=${audio}, mic=${mic}, camera=${__camera_req}) ...`);
 			__handle.send({"message": {"request": "watch", "params": {
 				"orientation": __orient,
 				"audio": audio,
-				"mic": mic,
+				"mic": !!mic,
 				"camera": !!__camera_req,
 			}}});
+			__watchHook();
 		}
 	};
 
@@ -633,4 +772,61 @@ JanusStreamer.ensure_janus = function(cb) {
 
 JanusStreamer.is_webrtc_available = function() {
 	return !!window.RTCPeerConnection;
+};
+
+function _makeSmartCameraTrack(track, res) {
+	const canvas = document.createElement("canvas");
+	canvas.width = res.width;
+	canvas.height = res.height;
+
+	const readable = new ReadableStream({
+		async start(controller) {
+			this.__ctx = canvas.getContext("2d", {"desynchronized": true});
+			track.addEventListener("ended", () => controller.close(), {"once": true});
+			this.__el_video = document.createElement("video");
+			this.__el_video.srcObject = new MediaStream([track]);
+			await Promise.all([this.__el_video.play(), new Promise(r => this.__el_video.onloadedmetadata = r)]);
+			this.__ts = performance.now();
+		},
+		async pull(controller) {
+			if (track.readyState == "ended") {
+				return controller.close();
+			}
+			const fps = (track.getSettings().frameRate || 30);
+			while (performance.now() - this.__ts < (1000 / fps)) {
+				await new Promise(r => requestAnimationFrame(r));
+				if (track.readyState == "ended") {
+					return controller.close();
+				}
+			}
+			this.__ts = performance.now();
+			if (this.__el_video.videoWidth == res.width) {
+				this.__ctx.drawImage(this.__el_video, 0, 0);
+			} else if (this.__el_video.videoWidth == res.height) {
+				const sw = this.__el_video.videoWidth; // Source
+				const sh = this.__el_video.videoHeight;
+				const dw = res.width; // Dest
+				const dh = res.height;
+
+				const th = sw * (dh / dw); // Cropped height
+				const ph = (sh - th) / 2; // Y padding
+
+				this.__ctx.drawImage(
+					this.__el_video,
+					0, ph, // Source (x,y)
+					sw, th, // Source size
+					0, 0, // Dest (x,y)
+					dw, dh); // Dest size
+			}
+			controller.enqueue(new VideoFrame(canvas, {"timestamp": this.__ts}));
+		},
+	});
+
+	const writable = new WritableStream({
+		write(frame) { frame.close(); },
+	});
+
+	readable.pipeTo(writable);
+
+	return canvas.captureStream().getVideoTracks()[0];
 };
