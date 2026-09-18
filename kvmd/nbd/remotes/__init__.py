@@ -46,7 +46,7 @@ from ..errors import NbdIoProtocolError
 
 from ..types import NbdImage
 from ..types import BaseNbdEvent
-from ..types import NbdStatusEvent
+from ..types import NbdRunningEvent
 
 from ..link import NbdLink
 
@@ -291,11 +291,11 @@ class BaseNbdRemote:
                 pass
             if send_event and not isinstance(ex, NbdError):
                 msg = f"{action}: {tools.efmt(ex)}; Retrying ..."
-                await self.__send_event(NbdStatusEvent(False, msg))
+                await self.__send_event(NbdRunningEvent(False, msg))
             raise
         else:
             if send_event and self.__opened is False:  # Ignore for None
-                await self.__send_event(NbdStatusEvent(True, "Online"))
+                await self.__send_event(NbdRunningEvent(True, "Online"))
             self.__opened = True
 
     async def __send_event(self, event: BaseNbdEvent) -> None:

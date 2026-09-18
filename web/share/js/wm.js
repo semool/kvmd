@@ -405,6 +405,9 @@ function __WindowManager() {
 		//  - https://github.com/mozilla/standards-positions/issues/196
 		//  - https://github.com/whatwg/fullscreen/issues/231
 		//  - https://bugzilla.mozilla.org/show_bug.cgi?id=700123
+		//
+		// Firefox doesn't catch Alt+Tab:
+		//  - https://bugzilla.mozilla.org/show_bug.cgi?id=2068831
 		if (document.documentElement.requestFullscreen && !$$("window-full-tab").length) {
 			let fs_lock = false;
 			let options = {

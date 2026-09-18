@@ -53,9 +53,6 @@ class NbdServer(HttpServer):
     ) -> None:
 
         super().__init__()
-
-        self.__device_path = device_path
-
         self.__ctl = NbdController(device_path, use_blkroset)
 
     # ===== HTTP
@@ -77,10 +74,11 @@ class NbdServer(HttpServer):
 
     @exposed_http("POST", "/bind")
     async def __bind_handler(self, req: Request) -> Response:
-        image = await self.__ctl.bind(**(await self.__get_params(req)))
-        return make_json_response({
-            "image":  dataclasses.asdict(image),
-        })
+        (binding_id, image) = await self.__ctl.bind(**(await self.__get_params(req)))
+        return make_json_response({"binding": {
+            "id":    binding_id,
+            "image": dataclasses.asdict(image),
+        }})
 
     async def __get_params(self, req: Request) -> dict[str, Any]:
         params: dict[str, Any] = {"url": ""}  # Positional param for all functions

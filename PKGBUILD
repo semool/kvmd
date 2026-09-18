@@ -40,7 +40,7 @@ for _variant in "${_variants[@]}"; do
 	pkgname+=(kvmd-platform-$_platform-$_board)
 done
 pkgbase=kvmd
-pkgver=4.213
+pkgver=4.216
 pkgrel=1
 pkgdesc="The main PiKVM daemon"
 url="https://github.com/pikvm/kvmd"
@@ -49,7 +49,6 @@ arch=(any)
 depends=(
 	"python>=3.14"
 	"python<3.15"
-	python-yaml
 	python-ruamel-yaml
 	python-aiohttp
 	python-aiofiles
@@ -100,7 +99,7 @@ depends=(
 	certbot
 	"raspberrypi-io-access>=0.9"
 	raspberrypi-utils
-	"ustreamer>=6.47"
+	"ustreamer>=6.67"
 
 	# Bootconfig
 	dos2unix
@@ -219,7 +218,7 @@ for _variant in "${_variants[@]}"; do
 		backup=()
 
 		pkgdesc=\"PiKVM platform configs - $_platform for $_board\"
-		depends=(kvmd=\"${epoch:+$epoch:}$pkgver-$pkgrel\" \"linux-rpi-pikvm>=6.12.92-2\" \"pikvm-os-raspberrypi>=0.10\")
+		depends=(kvmd=\"${epoch:+$epoch:}$pkgver-$pkgrel\" \"pikvm-os-raspberrypi>=0.10\")
 
 		if [[ $_base == v0 ]]; then
 			depends=(\"\${depends[@]}\" platformio-core avrdude make patch)

@@ -26,8 +26,9 @@ from typing import Any
 import aiohttp
 
 from ..nbd.types import NbdImage
-from ..nbd.types import NbdStatusEvent
-from ..nbd.types import NbdStopped
+from ..nbd.types import NbdRunningEvent
+from ..nbd.types import NbdStoppedEvent
+from ..nbd.types import NbdStateBinding
 from ..nbd.types import NbdState
 
 from ..nbd.errors import NbdBoundError
@@ -59,7 +60,7 @@ class NbdClient:
 
     async def get_remotes(self) -> dict[str, Any]:
         async with self.__make_session() as session:
-            async with session.get("/state") as resp:
+            async with session.get("/remotes") as resp:
                 htclient.raise_not_200(resp)
                 remotes = (await resp.json())["result"]
                 assert isinstance(remotes, dict)
@@ -100,12 +101,22 @@ class NbdClient:
                         raise NbdClientError(f"Unexpected message type: {msg!r}")
                     (event_type, event) = htserver.parse_ws_event(msg.data)
                     if event_type == "nbd":
-                        yield NbdState(
-                            image=(None if event["image"] is None else NbdImage(**event["image"])),
-                            bound=event["bound"],
-                            changed=(None if event["changed"] is None else NbdStatusEvent(**event["changed"])),
-                            stopped=(None if event["stopped"] is None else NbdStopped(**event["stopped"])),
-                        )
+                        binding: (NbdStateBinding | None) = None
+                        if event["binding"] is not None:
+                            eb = event["binding"]
+                            info: (NbdRunningEvent | NbdStoppedEvent | None) = None
+                            match eb["status"]:
+                                case "running":
+                                    info = NbdRunningEvent(**eb["info"])
+                                case "stopped":
+                                    info = NbdStoppedEvent(**eb["info"])
+                            binding = NbdStateBinding(
+                                id=eb["id"],
+                                image=NbdImage(**eb["image"]),
+                                status=eb["status"],
+                                info=info,
+                            )
+                        yield NbdState(event["device"], binding)
 
     async def __parse_response(self, resp: aiohttp.ClientResponse) -> dict:
         await htclient.raise_known_not_200(resp, NbdBoundError, NbdProbeError, ValidatorError)

@@ -42,11 +42,10 @@ from .errors import NbdProbeError
 
 from .types import NbdImage
 from .types import BaseNbdEvent
-from .types import NbdSetupEvent
-from .types import NbdStartEvent
-from .types import NbdStatusEvent
-from .types import NbdStopEvent
-from .types import NbdStopped
+from .types import NbdStartingEvent
+from .types import NbdRunningEvent
+from .types import NbdStoppedEvent
+from .types import NbdStateBinding
 from .types import NbdState
 
 from .device import NbdDevice
@@ -67,12 +66,11 @@ class NbdController:
     }
 
     def __init__(self, path: str, use_blkroset: bool) -> None:
-        self.__device_path = path
         self.__device = NbdDevice(path, use_blkroset)
         self.__proc: (NbdProcess | None) = None
         self.__nr = aiotools.AioNotifier()
         self.__lock = asyncio.Lock()
-        self.__state = NbdState()
+        self.__state = NbdState(path, None)
 
     # =====
 
@@ -112,7 +110,7 @@ class NbdController:
         self.__device.check_image(image)
         return (remote, image)
 
-    async def bind(self, url: str, **params: Any) -> NbdImage:
+    async def bind(self, url: str, **params: Any) -> tuple[str, NbdImage]:
         async with self.__lock:
             self.__device.check_readiness()
             if self.__proc:
@@ -123,7 +121,7 @@ class NbdController:
             assert self.__proc is None
             self.__nr.notify()
             self.__proc = NbdProcess(self.__device, remote, image)
-            return image
+            return self.__proc.get_binding()
 
     async def unbind(self) -> None:
         if self.__proc:
@@ -135,33 +133,35 @@ class NbdController:
     async def poll_state(self) -> AsyncGenerator[tuple[BaseNbdEvent, NbdState]]:
         async for event in self.__poll():
             match event:
-                case NbdSetupEvent():
-                    self.__state = NbdState(image=event.image)
-                case NbdStartEvent():
-                    assert self.__state.image is not None
-                    assert self.__state.changed is None
-                    assert self.__state.stopped is None
-                    self.__state = NbdState(self.__state.image, bound=self.__device_path)
-                case NbdStatusEvent():
-                    assert self.__state.image is not None
-                    assert self.__state.bound
-                    assert self.__state.stopped is None
-                    self.__state = NbdState(self.__state.image, bound=self.__device_path, changed=event)
-                case NbdStopEvent():
-                    assert self.__state.image is not None
-                    self.__state = NbdState(stopped=NbdStopped(self.__state.image, event))
+                case NbdStartingEvent():
+                    self.__state = NbdState(
+                        self.__state.device,
+                        NbdStateBinding(event.binding_id, event.image, "starting", None),
+                    )
+                case NbdRunningEvent():
+                    assert self.__state.binding is not None
+                    self.__state = NbdState(
+                        self.__state.device,
+                        NbdStateBinding(self.__state.binding.id, self.__state.binding.image, "running", event),
+                    )
+                case NbdStoppedEvent():
+                    assert self.__state.binding is not None
+                    self.__state = NbdState(
+                        self.__state.device,
+                        NbdStateBinding(self.__state.binding.id, self.__state.binding.image, "stopped", event),
+                    )
             yield (event, self.__state)
 
     async def __poll(self) -> AsyncGenerator[BaseNbdEvent]:
         while True:
             await self.__nr.wait()
             if self.__proc:
-                yield NbdSetupEvent(self.__proc.get_image())
-                stop: (NbdStopEvent | None) = None
+                yield NbdStartingEvent(*self.__proc.get_binding())
+                stop: (NbdStoppedEvent | None) = None
                 try:
                     async with self.__proc.running():
                         async for event in self.__proc.poll():
-                            if isinstance(event, NbdStopEvent):
+                            if isinstance(event, NbdStoppedEvent):
                                 if stop is None:
                                     stop = event
                             else:
@@ -174,5 +174,5 @@ class NbdController:
                     self.__proc = None
                 await self.__device.force_disconnect()
                 if stop is None:
-                    stop = NbdStopEvent("main", "Unknown stop reason", False)
+                    stop = NbdStoppedEvent("main", "Unknown stop reason", False)
                 yield stop

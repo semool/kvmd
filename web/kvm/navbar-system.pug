@@ -122,14 +122,14 @@ li.right#system-dropdown
 				tr.feature-disabled#stream-audio
 					td Audio volume:
 					td.slider(colspan="2") #[+menu_slider("stream-audio-volume-slider", "stream-audio-volume-value", false)]
-					td
+					td(style="width: 60px;")
 						.progress#stream-audio-vu-progress(title="Volume level on the remote host")
 							span.progress-value#stream-audio-vu-value
 				tr.feature-disabled#stream-mic
 					td Microphone:
 					td #[+menu_switch("stream-mic-switch", false, false)]
 					td(style="width: 150px;") #[select.small#stream-mic-selector(style="width: 100%;" disabled)]
-					td
+					td(style="width: 60px;")
 						.progress#stream-mic-vu-progress(title="How well PiKVM can hear you")
 							span.progress-value#stream-mic-vu-value
 				tr.feature-disabled#stream-mic-raw

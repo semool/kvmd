@@ -1,0 +1,10 @@
+[Unit]
+Description=PiKVM - Power Management
+Before=kvmd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bash -c 'f=/sys/devices/system/cpu/cpufreq/policy0/scaling_governor && chown root:kvmd $f && chmod 664 $f'
+
+[Install]
+WantedBy=multi-user.target

@@ -43,7 +43,6 @@ RUN \
 		python-installer \
 		python-tox \
 		python-mako \
-		python-yaml \
 		python-ruamel-yaml \
 		python-aiohttp \
 		python-aiofiles \
