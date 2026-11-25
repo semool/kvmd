@@ -29,6 +29,8 @@ from typing import Generator
 from typing import AsyncGenerator
 from typing import Any
 
+import aiohttp
+
 from ....logging import get_logger
 
 from ....inotify import Inotify
@@ -37,10 +39,11 @@ from ....yamlconf import Section
 from ....yamlconf import Option
 
 from ....clients.nbd import NbdClient
+from ....nbd.types import NbdImage
 
-from ....validators.basic import valid_number
 from ....validators.os import valid_command
 
+from .... import tools
 from .... import aiotools
 
 from .. import MsdIsBusyError
@@ -50,63 +53,50 @@ from .. import MsdDisconnectedError
 from .. import MsdImageNotSelected
 from .. import MsdUnknownImageError
 from .. import MsdImageStaticError
-from .. import MsdRemoteDisabledError
 from .. import BaseMsd
 from .. import MsdFileReader
 from .. import MsdFileWriter
 
-from .storage import Image
+from .storage import FileImage
 from .storage import Storage
+
+from .remote import Nbd
+
+from .drive import is_cdromable
 from .drive import Drive
 
 
 # =====
 @dataclasses.dataclass
 class _VirtualDrive:
-    image:     (Image | None)
+    image:     (FileImage | NbdImage | None)
     connected: bool
     cdrom:     bool
     rw:        bool
-
-    def get_state(self) -> dict:
-        state = dataclasses.asdict(self)
-        if state["image"]:
-            del state["image"]["path"]
-        return state
 
 
 class _State:
     def __init__(self, nr: aiotools.AioNotifier) -> None:
         self.__nr = nr
-
-        self.__storage: (Storage | None) = None
         self.__vd: (_VirtualDrive | None) = None
-
         self.__region = aiotools.AioExclusiveRegion(MsdIsBusyError)
         self.__lock = asyncio.Lock()
 
-    @property
-    def storage(self) -> (Storage | None):
-        assert self.__lock.locked()
-        return self.__storage
-
-    @property
-    def vd(self) -> (_VirtualDrive | None):
+    def __p_get_vd(self) -> (_VirtualDrive | None):
         assert self.__lock.locked()
         return self.__vd
+
+    def __p_set_vd(self, vd: (_VirtualDrive | None)) -> None:
+        assert self.__lock.locked()
+        self.__vd = vd
+
+    vd = property(__p_get_vd, __p_set_vd)
 
     def is_busy(self) -> bool:
         return self.__region.is_busy()
 
-    @contextlib.asynccontextmanager
-    async def locked_only(self) -> AsyncGenerator[None]:
-        async with self.__lock:
-            yield
-
-    # =====
-
     @contextlib.contextmanager
-    def busy_unlocked(self) -> Generator[None]:
+    def busy_only(self) -> Generator[None]:
         try:
             with self.__region:
                 self.__nr.notify()
@@ -115,65 +105,35 @@ class _State:
             self.__nr.notify()
 
     @contextlib.asynccontextmanager
-    async def locked_under_busy(self) -> AsyncGenerator[None]:
-        assert self.is_busy()
+    async def locked_only(self) -> AsyncGenerator[None]:
         async with self.__lock:
             yield
 
     @contextlib.asynccontextmanager
-    async def busy_locked(self) -> AsyncGenerator[None]:
-        with self.busy_unlocked():
-            async with self.locked_under_busy():
+    async def busy_and_locked(self) -> AsyncGenerator[None]:
+        with self.busy_only():
+            async with self.locked_only():
                 yield
 
     # =====
 
-    def check_online_connected(self, drive: Drive) -> tuple[Storage, _VirtualDrive]:
+    def check_online_connected(self, drive: Drive) -> _VirtualDrive:
         assert self.is_busy()
         assert self.__lock.locked()
         if self.vd is None:
             raise MsdOfflineError()
         if not (self.vd.connected or drive.get_image_path()):
             raise MsdDisconnectedError()
-        assert self.storage
-        return (self.storage, self.vd)
+        return self.vd
 
-    def check_online_disconnected(self, drive: Drive) -> tuple[Storage, _VirtualDrive]:
+    def check_online_disconnected(self, drive: Drive) -> _VirtualDrive:
         assert self.is_busy()
         assert self.__lock.locked()
         if self.vd is None:
             raise MsdOfflineError()
         if self.vd.connected or drive.get_image_path():
             raise MsdConnectedError()
-        assert self.storage
-        return (self.storage, self.vd)
-
-    # =====
-
-    async def set_offline(self) -> None:
-        assert self.__lock.locked()
-        self.__storage = None
-        self.__vd = None
-
-    async def set_online(self, storage: Storage, real_vd: _VirtualDrive) -> None:
-        assert self.__lock.locked()
-        self.__storage = storage
-
-        if real_vd.image:
-            # При подключенном образе виртуальный стейт заменяется реальным
-            assert real_vd.connected
-            self.__vd = real_vd
-        else:
-            if self.__vd is None:
-                # Если раньше MSD был отключен
-                self.__vd = real_vd
-
-            image = self.__vd.image
-            if image and (not image.in_storage or not (await image.exists())):
-                # Если только что отключили ручной образ вне хранилища или ранее выбранный образ был удален
-                self.__vd.image = None
-
-            self.__vd.connected = False
+        return self.vd
 
 
 # =====
@@ -181,9 +141,7 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
     def __init__(self, c: Section, nbd: NbdClient) -> None:
         super().__init__(c, nbd)
 
-        self.__read_chunk_size = c.read_chunk_size
-        self.__write_chunk_size = c.write_chunk_size
-        self.__sync_chunk_size = c.sync_chunk_size
+        self.__nbd = Nbd(nbd)
 
         self.__drive = Drive(instance=0, lun=0)
         self.__storage = Storage(c.remount_cmd)
@@ -198,10 +156,6 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
     @classmethod
     def get_plugin_options(cls) -> dict:
         return {
-            "read_chunk_size":   Option(65536,   type=valid_number.mk(min=1024)),
-            "write_chunk_size":  Option(65536,   type=valid_number.mk(min=1024)),
-            "sync_chunk_size":   Option(4194304, type=valid_number.mk(min=1024)),
-
             "remount_cmd": Option([
                 "/usr/bin/sudo", "--non-interactive",
                 "/usr/bin/kvmd-helper-otgmsd-remount", "{mode}",
@@ -215,17 +169,22 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
 
     async def get_state(self) -> dict:
         async with self.__state.locked_only():
+            vd: (dict | None) = None
             storage: (dict | None) = None
-            if self.__state.storage:
-                assert self.__state.vd
-                storage = self.__state.storage.get_state()
+
+            if self.__state.vd:
+                vd = dataclasses.asdict(self.__state.vd)
+                if vd["image"]:
+                    vd["image"].pop("path", None)  # FileImage
+                    vd["image"].setdefault("url", None)  # FileImage
+                    vd["image"].setdefault("in_storage", False)  # NbdImage
+                    vd["image"].setdefault("cdromable", is_cdromable(vd["image"]["size"]))  # NbdImage
+                    vd["image"].setdefault("removable", False)  # NbdImage
+                    vd["image"].setdefault("complete", True)  # NbdImage
+
+                storage = self.__storage.get_state()
                 storage["downloading"] = (self.__reader.get_state() if self.__reader else None)
                 storage["uploading"] = (self.__writer.get_state() if self.__writer else None)
-
-            vd: (dict | None) = None
-            if self.__state.vd:
-                assert self.__state.storage
-                vd = self.__state.vd.get_state()
 
             return {
                 "enabled": True,
@@ -263,7 +222,7 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
 
     @aiotools.atomic_fg
     async def reset(self) -> None:
-        async with self.__state.busy_locked():
+        async with self.__state.busy_and_locked():
             try:
                 self.__reset = True
                 self.__drive.set_image_path("")
@@ -275,81 +234,129 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
 
     # =====
 
-    @aiotools.atomic_fg
     async def set_params(
         self,
         name: (str | None)=None,
+        guess: (bool | None)=None,
         cdrom: (bool | None)=None,
         rw: (bool | None)=None,
         remote_url: (str | None)=None,
         remote_params: (dict[str, Any] | None)=None,
     ) -> None:
 
-        if remote_url is not None:
-            _ = remote_params
-            raise MsdRemoteDisabledError()
+        with self.__state.busy_only():
+            async with self.__state.locked_only():
+                self.__state.check_online_disconnected(self.__drive)
 
-        async with self.__state.busy_locked():
-            (storage, vd) = self.__state.check_online_disconnected(self.__drive)
+            # Это делается не под блокировкой, чтобы get_state() не подвисал
+            if remote_url:
+                await self.__nbd.unbind()
+                await self.__nbd.plan(remote_url, remote_params)
+            elif name is not None and self.__nbd.image:
+                await self.__nbd.unbind()
+                await self.__nbd.unplan()
 
-            if name is not None:
-                if name:
-                    vd.image = await storage.get_image_by_name(name)
-                else:
-                    vd.image = None
+            async with self.__state.locked_only():
+                vd = self.__state.check_online_disconnected(self.__drive)
 
-            if cdrom is not None:
-                vd.cdrom = cdrom
+                # Если где-то прилетит CancelledError - не страшно,
+                # настройка образа из хранилища идет первой операцией
+                # и зафейлится сразу всё.
 
-            if rw is not None:
-                vd.rw = rw
+                if self.__nbd.image:
+                    vd.image = self.__nbd.image
+                elif name is not None:
+                    if name:
+                        vd.image = await self.__storage.get_image_by_name(name)
+                    else:
+                        vd.image = None
 
-            if vd.rw and (vd.cdrom or (vd.image and not vd.image.writable)):
-                vd.rw = False
+                if guess is not None and cdrom is None and vd.image:
+                    vd.cdrom = vd.image.name.lower().endswith(".iso")
+
+                if cdrom is not None:
+                    vd.cdrom = cdrom
+
+                if rw is not None:
+                    vd.rw = rw
+
+                if vd.cdrom and vd.image and not is_cdromable(vd.image.size):
+                    vd.cdrom = False
+
+                if vd.rw and (vd.cdrom or (vd.image and not vd.image.writable)):
+                    vd.rw = False
+
+    async def set_connected(self, connected: bool) -> None:
+        with self.__state.busy_only():
+            if connected:
+                if self.__nbd.image and self.__nbd.asserted_ready_to_bind:
+                    await self.__nbd.bind()
+                await self.__unsafe_connect()
+            else:
+                await self.__unsafe_disconnect()
 
     @aiotools.atomic_fg
-    async def set_connected(self, connected: bool) -> None:
-        async with self.__state.busy_locked():
-            if connected:
-                (storage, vd) = self.__state.check_online_disconnected(self.__drive)
+    async def __unsafe_connect(self) -> None:
+        async with self.__state.locked_only():
+            vd = self.__state.check_online_disconnected(self.__drive)
+            match vd.image:
+                case FileImage():
+                    if not (await vd.image.exists()):
+                        raise MsdUnknownImageError()
+                    if not vd.image.in_storage:
+                        # Машина состояний не должна допускать того, чтобы в виртуальной конфигурации
+                        # привода находился образ вне хранилища, но всё же перепроверим.
+                        raise MsdUnknownImageError()
+                    if vd.rw:
+                        await self.__storage.remount_rw(vd.image)
+                    path = vd.image.path
 
-                if vd.image is None:
+                case NbdImage():
+                    if self.__nbd.image is None or not self.__nbd.asserted_running:
+                        # Рассинхрон, засинхронится само в __systask_nbd()
+                        raise MsdImageNotSelected()
+                    assert self.__nbd.last_known_path
+                    vd.image = self.__nbd.image
+                    path = self.__nbd.last_known_path
+
+                case _:  # None
                     raise MsdImageNotSelected()
 
-                if not (await vd.image.exists()):
-                    raise MsdUnknownImageError()
+            self.__drive.set_rw_flag(vd.rw)
+            self.__drive.set_cdrom_flag(vd.cdrom)
+            self.__drive.set_image_path(path)
+            vd.connected = True
 
-                if not vd.image.in_storage:
-                    # Машина состояний не должна допускать того, чтобы в виртуальной конфигурации
-                    # привода находился образ вне хранилища, но всё же перепроверим.
-                    raise MsdUnknownImageError()
-
-                if vd.rw:
-                    await storage.remount_rw(vd.image)
-                self.__drive.set_rw_flag(vd.rw)
-                self.__drive.set_cdrom_flag(vd.cdrom)
-                self.__drive.set_image_path(vd.image.path)
-                vd.connected = True
-
-            else:
-                (storage, vd) = self.__state.check_online_connected(self.__drive)
+    @aiotools.atomic_fg
+    async def __unsafe_disconnect(self) -> None:
+        disconnected = False
+        try:
+            async with self.__state.locked_only():
+                vd = self.__state.check_online_connected(self.__drive)
                 self.__drive.set_image_path("")
                 vd.connected = False
-                await storage.remount_ro()
+                disconnected = True
+                if isinstance(vd.image, FileImage):
+                    await self.__storage.remount_ro()
+        finally:
+            # Не под блокировкой, чтобы не get_state() не подвис в ожидании unbind()
+            if disconnected:
+                # Не идеально, но сойдет
+                if self.__nbd.image and self.__nbd.asserted_running:
+                    await self.__nbd.unbind()
 
     @contextlib.asynccontextmanager
     async def read_image(self, name: str) -> AsyncGenerator[MsdFileReader]:
-        with self.__state.busy_unlocked():
+        with self.__state.busy_only():
             try:
-                async with self.__state.locked_under_busy():
-                    (storage, _) = self.__state.check_online_disconnected(self.__drive)
-                    image = await storage.get_image_by_name(name)
+                async with self.__state.locked_only():
+                    self.__state.check_online_disconnected(self.__drive)
+                    image = await self.__storage.get_image_by_name(name)
 
                     self.__reader = await MsdFileReader(
                         nr=self.__nr,
                         name=image.name,
                         path=image.path,
-                        chunk_size=self.__read_chunk_size,
                     ).open()
 
                 self.__nr.notify()
@@ -363,45 +370,46 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
         self,
         name: str,
         size: int,
+        activate: bool,
         remove_incomplete: bool,
     ) -> AsyncGenerator[MsdFileWriter]:
 
-        image: (Image | None) = None
+        image: (FileImage | None) = None
         complete = False
 
         async def finish_writing() -> None:
             # Делаем под блокировкой, чтобы эвент айнотифи не был обработан
             # до того, как мы не закончим все процедуры.
-            async with self.__state.locked_under_busy():
+            async with self.__state.locked_only():
                 try:
                     await self.__close_writer()
                 finally:
                     if image:
-                        (storage, _) = self.__state.check_online_disconnected(self.__drive)
+                        self.__state.check_online_disconnected(self.__drive)
                         try:
                             await image.set_complete(complete)
                         finally:
                             try:
                                 if remove_incomplete and not complete:
-                                    await storage.remove_image(image, fatal=False)
+                                    await self.__storage.remove_image(image, fatal=False)
+                                elif activate:
+                                    self.__state.vd.image = image
                             finally:
-                                await storage.remount_ro()
+                                await self.__storage.remount_ro()
 
-        with self.__state.busy_unlocked():
+        with self.__state.busy_only():
             try:
-                async with self.__state.locked_under_busy():
-                    (storage, _) = self.__state.check_online_disconnected(self.__drive)
-                    image = await storage.make_image(name)
+                async with self.__state.locked_only():
+                    self.__state.check_online_disconnected(self.__drive)
+                    image = await self.__storage.make_image(name)
 
-                    await storage.remount_rw(image)
+                    await self.__storage.remount_rw(image)
                     await image.set_complete(False)
                     self.__writer = await MsdFileWriter(
                         nr=self.__nr,
                         name=image.name,
                         path=image.path,
                         file_size=size,
-                        sync_size=self.__sync_chunk_size,
-                        chunk_size=self.__write_chunk_size,
                     ).open()
 
                 self.__nr.notify()
@@ -413,9 +421,9 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
 
     @aiotools.atomic_fg
     async def remove(self, name: str) -> None:
-        async with self.__state.busy_locked():
-            (storage, vd) = self.__state.check_online_disconnected(self.__drive)
-            image = await storage.get_image_by_name(name)
+        async with self.__state.busy_and_locked():
+            vd = self.__state.check_online_disconnected(self.__drive)
+            image = await self.__storage.get_image_by_name(name)
 
             if not image.removable:
                 raise MsdImageStaticError()
@@ -423,10 +431,10 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
             if vd.image == image:
                 vd.image = None
             try:
-                await storage.remount_rw(image)
-                await storage.remove_image(image, fatal=True)
+                await self.__storage.remount_rw(image)
+                await self.__storage.remove_image(image, fatal=True)
             finally:
-                await aiotools.shield_fg(storage.remount_ro())
+                await aiotools.shield_fg(self.__storage.remount_ro())
 
     # =====
 
@@ -454,83 +462,129 @@ class Plugin(BaseMsd):  # pylint: disable=too-many-instance-attributes
             await self.__close_writer()
 
     async def systask(self) -> None:
+        await aiotools.spawn_and_follow(
+            self.__systask_inotify(),
+            self.__systask_nbd(),
+        )
+
+    async def __systask_inotify(self) -> None:
+        logger = get_logger(0)
         while True:
             try:
-                await self.__systask_single()
+                # logger.info("+++++ Reloading storage ...")
+                while not (self.__drive.is_enabled() and (await self.__storage.is_enabled())):
+                    await asyncio.sleep(1)
+
+                with Inotify() as inotify:
+                    for path in self.__drive.get_watchable_paths():
+                        await inotify.watch_all_changes(path)
+
+                    async with self.__state.locked_only():
+                        # Если только что включились и образ не подключен - протестить хранилище
+                        if self.__state.vd is None and not self.__drive.get_image_path():
+                            logger.info("Probing to remount storage ...")
+                            await self.__storage.remount_probe()
+
+                        storage_wds: set[int] = set()
+                        async for path in self.__storage.reload():
+                            storage_wds.add(await inotify.watch_all_changes(path))
+
+                        await self.__update_vd()
+
+                    while True:
+                        reload = await self.__handle_inotify_events(inotify, storage_wds)
+                        if reload or self.__reset:
+                            break
+
             except Exception:
-                get_logger(0).exception("Unexpected MSD watcher error")
+                logger.exception("Unexpected inotify watcher error")
+                async with self.__state.locked_only():
+                    self.__offline_vd()
                 await asyncio.sleep(1)
 
-    async def __systask_single(self) -> None:
-        while (
-            not self.__drive.is_enabled()
-            or not (await self.__storage.is_probably_enabled())
-        ):
-            await asyncio.sleep(1)
+    async def __handle_inotify_events(self, inotify: Inotify, storage_wds: set[int]) -> bool:
+        vd_changed = False
+        for event in (await inotify.get_series()):
+            # get_logger(0).info("+++++ EVENT: %s", event)
+            if event.restart:
+                get_logger(0).info("Got restart event: %s", event)
+                return True
+            if event.wd in storage_wds:
+                return True
+            vd_changed = True
 
-        with Inotify() as inotify:
-            for path in self.__drive.get_watchable_paths():
-                await inotify.watch_all_changes(path)
-            storage_wds = await self.__reload(inotify, True)
+        if vd_changed:
+            async with self.__state.locked_only():
+                await self.__update_vd()
 
-            while True:
-                async with self.__state.locked_only():
-                    if self.__state.vd is None:
-                        return
+        elif self.__writer:  # Таймаут
+            # При загрузке файла обновляем статистику раз в секунду (по таймауту).
+            # Это не нужно при обычном релоаде, потому что там и так проверяются все разделы.
+            async with self.__state.locked_only():
+                await self.__storage.reload_parts()
+            self.__nr.notify()
 
-                need_reload = False
-                reload_storage = False
-                for event in (await inotify.get_series()):
-                    # get_logger(0).info("+++++ EVENT: %s", event)
-                    if event.restart:
-                        get_logger(0).info("Got restart event: %s", event)
-                        return
-                    need_reload = True
-                    if event.wd in storage_wds:
-                        reload_storage = True
+        return False
 
-                if need_reload:
-                    await self.__reload(inotify, reload_storage)
-                elif self.__writer:  # Таймаут
-                    # При загрузке файла обновляем статистику раз в секунду (по таймауту).
-                    # Это не нужно при обычном релоаде, потому что там и так проверяются все разделы.
-                    async with self.__state.locked_only():
-                        await self.__storage.reload_parts()
-                    self.__nr.notify()
-
-    async def __reload(self, inotify: Inotify, reload_storage: bool) -> set[int]:
-        storage_wds: set[int] = set()
-        async with self.__state.locked_only():
-            try:
-                if self.__state.storage is None or reload_storage:
-                    # get_logger(0).info("+++++ Reloading storage ...")
-                    async for path in self.__storage.reload():
-                        storage_wds.add(await inotify.watch_all_changes(path))
-
-                real_vd = await self.__get_real_vd()
-
-                if self.__state.vd is None and real_vd.image is None:
-                    # Если только что включились и образ не подключен - попробовать
-                    # перемонтировать хранилище (и накатить всякие фиксы по необходимости).
-                    get_logger(0).info("Probing to remount storage ...")
-                    await self.__storage.remount_probe()
-
-            except Exception:
-                get_logger(0).exception("Error while reloading MSD state; switching offline")
-                await self.__state.set_offline()
-            else:
-                await self.__state.set_online(self.__storage, real_vd)
+    def __offline_vd(self) -> None:
+        self.__state.vd = None
         self.__nr.notify()
-        return storage_wds
 
-    async def __get_real_vd(self) -> _VirtualDrive:
-        path = self.__drive.get_image_path()
-        image: (Image | None) = None
+    async def __update_vd(self) -> None:
+        path = self.__drive.get_image_path()  # Ядро всегда отдает realpath
+        cdrom = self.__drive.get_cdrom_flag()
+        rw = self.__drive.get_rw_flag()
+
+        image: (FileImage | NbdImage | None) = None
         if path:
-            image = await self.__storage.get_image_by_path(path)
-        return _VirtualDrive(
-            image=image,
-            connected=bool(path),
-            cdrom=self.__drive.get_cdrom_flag(),
-            rw=self.__drive.get_rw_flag(),
-        )
+            if self.__nbd.image and path == self.__nbd.last_known_path:  # Это тоже realpath
+                image = self.__nbd.image
+            else:
+                image = await self.__storage.get_image_by_path(path)
+        else:
+            if self.__state.vd:
+                image = self.__state.vd.image
+                cdrom = self.__state.vd.cdrom
+                rw = self.__state.vd.rw
+            if self.__nbd.image:
+                image = self.__nbd.image
+            elif isinstance(image, NbdImage):
+                # Если был запланирован NBD, но KVMD-NBD рестартнули
+                image = None
+
+        self.__state.vd = _VirtualDrive(image, bool(path), cdrom, rw)
+        self.__nr.notify()
+
+    async def __systask_nbd(self) -> None:
+        # Мы игнорируем /bind на KVMD-NBD, но реагируем на остальные действия. Так проще.
+        logger = get_logger(0)
+        ok = True
+        while True:
+            try:
+                try:
+                    async for _ in self.__nbd.poll_for_changes():
+                        self.__poke_drive_for_nbd()
+                        if not ok:
+                            logger.info("NBD online")
+                            ok = True
+                except Exception:
+                    if ok:
+                        self.__poke_drive_for_nbd()
+                    raise
+            except Exception as ex:
+                if ok:
+                    if isinstance(ex, aiohttp.ClientError):
+                        logger.info("NBD is not available: %s", tools.efmt(ex))
+                    else:
+                        logger.exception("Unexpected NBD watcher error; disabling remote for now")
+                    ok = False
+                await asyncio.sleep(1)
+
+    def __poke_drive_for_nbd(self) -> None:
+        if (
+            self.__drive.get_image_path() == self.__nbd.last_known_path
+            or (self.__nbd.image and not self.__nbd.asserted_running)
+        ):
+            self.__drive.set_image_path("")
+        else:
+            self.__drive.trigger_image_inotify()

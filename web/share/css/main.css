@@ -47,7 +47,7 @@ hr {
 p.text {
 	text-align: justify;
 }
-p:not(:first-child).text {
+p:first-child.text {
 	margin-top: 0;
 }
 p:last-child.text {
@@ -121,6 +121,8 @@ input[type=color] {
 	font-size: 16px;
 	outline: none;
 	cursor: pointer;
+	padding-left: 1em;
+	padding-right: 1em;
 }
 input[type=color] {
 	height: 20px;
@@ -155,7 +157,10 @@ select:not([size]) {
 	padding: 4px 25px 4px 8px;
 }
 button.small,
-select.small {
+select.small,
+input.small,
+input[type=file]::-webkit-file-selector-button,
+input[type=file]::file-selector-button {
 	font-size: 12px;
 	height: 26px;
 }
@@ -201,7 +206,8 @@ select:not([size]) option.comment {
 	font-style: italic;
 }
 
-input[type=text], input[type=password] {
+input[type=text],
+input[type=password] {
 	overflow-x: auto;
 	font-family: monospace;
 	box-sizing: border-box;
@@ -210,7 +216,13 @@ input[type=text], input[type=password] {
 	color: var(--cs-code-default-fg);
 	background-color: var(--cs-code-default-bg);
 	padding: 2px;
+	padding-left: 0.5em;
 	height: 30px;
+}
+
+input[type=text]::-moz-placeholder,
+input[type=text]::-webkit-input-placeholder {
+	text-align: center;
 }
 
 textarea {

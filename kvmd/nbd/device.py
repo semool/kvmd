@@ -43,7 +43,7 @@ from .. import aiotools
 from .errors import NbdBoundError
 from .errors import NbdDeviceError
 from .types import NbdImage
-from .link import NbdLink
+from .link import BaseNbdLink
 
 
 # =====
@@ -93,6 +93,7 @@ class NbdDevice:
     def __init__(self, path: str, use_blkroset: bool) -> None:
         self.__path = path
         self.__use_blkroset = use_blkroset
+        self.__size = 0
 
     # =====
 
@@ -104,7 +105,7 @@ class NbdDevice:
         if not os.path.exists(self.__path):
             raise NbdDeviceError(f"Can't find NBD device: {self.__path}")
         if os.path.exists(aps.pid):
-            raise NbdBoundError("NBD is already bound")
+            raise NbdBoundError()
 
     async def force_disconnect(self) -> None:
         aps = self.__get_attr_paths()
@@ -124,7 +125,17 @@ class NbdDevice:
             await asyncio.sleep(1)
 
     async def open_close(self) -> None:
+        # 1. Стандартный для NBD open/close, чтобы убедиться, что девайс стартанул.
+        # 2. Ядро не сразу обновляет размер блочного устройства, так что надо дождаться
+        #    изменения размера перед использованием. В dmesg это видно как:
+        #    ...  nbd15: detected capacity change from 0 to N
         fd = await asyncio.to_thread(os.open, self.__path, os.O_RDONLY)
+        while True:
+            size = await asyncio.to_thread(os.lseek, fd, 0, os.SEEK_END)
+            assert self.__size > 0
+            if size == self.__size:
+                break
+            await asyncio.sleep(0.1)
         await asyncio.to_thread(os.close, fd)
 
     def __get_attr_paths(self) -> _AttrPaths:
@@ -140,7 +151,7 @@ class NbdDevice:
     # =====
 
     @contextlib.asynccontextmanager
-    async def open_prepared(self, link: NbdLink, image: NbdImage) -> AsyncGenerator[int]:
+    async def open_prepared(self, link: BaseNbdLink, image: NbdImage) -> AsyncGenerator[int]:
         self.check_image(image)
         self.check_readiness()
         with _wrap_exceptions():
@@ -177,21 +188,22 @@ class NbdDevice:
 
         blocks = self.__get_blocks(image.size)
 
-        logger.info("Preparing %s: bytes=%s, bs=%s, blocks=%s, rw=%s ...",
-                    self.__path, image.size, self.__BLOCK, blocks, image.rw)
+        logger.info("Preparing %s: bytes=%s, bs=%s, blocks=%s, writable=%s ...",
+                    self.__path, image.size, self.__BLOCK, blocks, image.writable)
 
         _ioctl(fd, _NBD_SET_BLKSIZE, self.__BLOCK)
         _ioctl(fd, _NBD_SET_SIZE_BLOCKS, blocks)
+        self.__size = blocks * self.__BLOCK
 
         _ioctl(fd, _NBD_CLEAR_SOCK)
 
         flags = _NBD_FLAG_HAS_FLAGS
-        if not image.rw:
+        if not image.writable:
             flags |= _NBD_FLAG_READ_ONLY
         _ioctl(fd, _NBD_SET_FLAGS, flags)
 
         if self.__use_blkroset:
-            ro_bytes = int(not image.rw).to_bytes(byteorder=sys.byteorder, length=4)  # Kinda ptr
+            ro_bytes = int(not image.writable).to_bytes(byteorder=sys.byteorder, length=4)  # Kinda ptr
             _ioctl(fd, _BLKROSET, ro_bytes)  # XXX: PiKVM kernel sets BLKROSET with NBD_SET_FLAGS
 
         _ioctl(fd, _NBD_SET_TIMEOUT, math.ceil(self.__TIMEOUT))

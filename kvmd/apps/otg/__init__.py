@@ -119,11 +119,14 @@ class _GadgetConfig:
 
         _mkdir(meta_path)
 
-    def add_camera(  # pylint: disable=too-many-locals
+    def add_camera(  # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
         self,
         starter: list[str],
         start: bool,
-        safe: bool,
+        res_max: str,
+        res_default: str,
+        max_packet: int,
+        interval: int,
         ct_mask: int,
         pu_mask: int,
     ) -> None:
@@ -155,12 +158,19 @@ class _GadgetConfig:
         D21: Region of Interest
         """
 
+        def make_interval(fps: int) -> int:
+            return math.floor(1 / fps * 10_000_000)  # 30 -> 333333, 100ns units
+
+        (max_width, max_height) = map(int, res_max.split("x"))
+
         func = "uvc.usb0"
         func_path = self.__create_function(func)
 
+        default_index = 1  # Numbering starts from 1
+        index = 1
         _mkdir(join(func_path, "streaming/mjpeg/m"))
-        for (width, height, framerates) in [  # TODO: Make it configurable
-            # (1920, 1080, [30, 24, 20, 15, 10, 5]),
+        for (width, height, framerates) in [
+            (1920, 1080, [30, 24, 20, 15, 10, 5]),
             (1280, 720,  [30, 24, 20, 15, 10, 5]),
             (1024, 768,  [30, 24, 20, 15, 10, 5]),
             (1024, 576,  [30, 24, 20, 15, 10, 5]),
@@ -176,17 +186,28 @@ class _GadgetConfig:
             # (160,  120,  [30, 24, 20, 15, 10, 5]),
             # (160,  90,   [30, 24, 20, 15, 10, 5]),
         ]:
-            if not framerates or (safe and width > 640):
+            if (width > max_width) or (height > max_height):
                 continue
+
             fmt_path = join(func_path, f"streaming/mjpeg/m/{width}x{height}")
             _mkdir(fmt_path)
+
             _write(join(fmt_path, "wWidth"), width)
             _write(join(fmt_path, "wHeight"), height)
             _write(join(fmt_path, "dwMaxVideoFrameBufferSize"), width * height)  # Should be fine
-            _write(join(fmt_path, "dwFrameInterval"), "\n".join(
-                str(math.floor(1 / fps * 10_000_000))  # 30 -> 333333, 100ns units
-                for fps in framerates
-            ))
+            _write(join(fmt_path, "dwFrameInterval"), "\n".join(map(str, map(make_interval, framerates))))
+
+            # Without these the kernel keeps its own defaults, which describe
+            # a 640x360 frame at 15 FPS no matter what we have configured
+            _write(join(fmt_path, "dwDefaultFrameInterval"), make_interval(max(framerates)))
+            _write(join(fmt_path, "dwMinBitRate"), width * height * 80)  # It was taken from some Logitech cam
+            _write(join(fmt_path, "dwMaxBitRate"), width * height * 480)  # Same
+
+            if f"{width}x{height}" == res_default:
+                default_index = index
+            index += 1
+
+        _write(join(func_path, "streaming/mjpeg/m/bDefaultFrameIndex"), default_index)
 
         path = join(func_path, "streaming/header/h")
         _mkdir(path)
@@ -205,8 +226,14 @@ class _GadgetConfig:
         ]:
             _write(join(func_path, path), "\n".join(map(str, mask.to_bytes(mask_len, "little"))))
 
-        _write(join(func_path, "streaming_maxpacket"), 1024)
-        _write(join(func_path, "streaming_interval"), 4)
+        # The isochronous budget is maxpacket bytes every 2^(interval-1) microframes (125us),
+        # so the defaults give ~1 MB/s, enough for 720p with a moderate picture. 1080p needs
+        # interval 1 (8 MB/s with 1024), at the price of the kernel having to serve
+        # the endpoint every single microframe. Packets above 1024 bytes are not offered:
+        # they need several transactions per microframe, the kernel forces interval 1 for them,
+        # and 3072 does not even fit the TX FIFO of the Pi.
+        _write(join(func_path, "streaming_maxpacket"), max_packet)
+        _write(join(func_path, "streaming_interval"), interval)
 
         self.__setup_function(func, "Camera", 2, starter, start)  # TODO: Check eps number
 
@@ -231,10 +258,14 @@ class _GadgetConfig:
             _write(join(func_path, "p_chmask"), 0)
         self.__setup_function(func, "+".join(desc), len(desc) + 1, starter, start)
 
-    def add_serial(self, starter: list[str], start: bool) -> None:
-        func = "acm.usb0"
+    def add_serial(self, starter: list[str], start: bool, driver: str) -> None:
+        func = f"{driver}.usb0"
         self.__create_function(func)
-        self.__setup_function(func, "Serial Port", 3, starter, start)
+        # ACM adds a notification interrupt endpoint on top of the two bulk ones,
+        # while the generic serial function uses just the two bulk endpoints.
+        # See drivers/usb/gadget/function/f_acm.c and f_serial.c
+        eps = (2 if driver == "gser" else 3)
+        self.__setup_function(func, "Serial Port", eps, starter, start)
 
     def add_ethernet(self, starter: list[str], start: bool, driver: str, host_mac: str, kvm_mac: str) -> None:
         if host_mac and kvm_mac and host_mac == kvm_mac:
@@ -302,14 +333,14 @@ class _GadgetConfig:
         func = f"mass_storage.usb{self.__msd_instance}"
         func_path = self.__create_function(func)
         _write(join(func_path, "stall"), int(stall))  # https://github.com/raspberrypi/linux/issues/7452
-        if image_path:
-            _write(join(func_path, "lun.0/file"), image_path)
         _write(join(func_path, "lun.0/cdrom"), int(cdrom))
         _write(join(func_path, "lun.0/ro"), int(not rw))
         _write(join(func_path, "lun.0/removable"), int(removable))
         _write(join(func_path, "lun.0/nofua"), int(not fua))
         _write(join(func_path, "lun.0/inquiry_string_cdrom"), inquiry_string_cdrom)
         _write(join(func_path, "lun.0/inquiry_string"), inquiry_string_flash)
+        if image_path:
+            _write(join(func_path, "lun.0/file"), image_path)
         if user != "root":
             _chown(join(func_path, "lun.0/cdrom"), user)
             _chown(join(func_path, "lun.0/ro"), user)
@@ -368,70 +399,72 @@ def _cmd_start(config: Section) -> None:  # pylint: disable=too-many-statements,
         logger.info("Nothing to do")
         return
 
+    co = config.otg
+    cod = config.otg.devices
+
     gadget_path = usb.get_gadget_path()
     if os.path.exists(gadget_path):
         logger.info("Already started/prepared, nothing to do")
         return
 
-    udc = usb.find_udc(config.otg.udc)
+    udc = usb.find_udc(co.udc)
     logger.info("Using UDC %s", udc)
 
     logger.info("Creating the gadget: %s ...", gadget_path)
     _mkdir(gadget_path)
 
-    _write(join(gadget_path, "idVendor"), f"0x{config.otg.vendor_id:04X}")
-    _write(join(gadget_path, "idProduct"), f"0x{config.otg.product_id:04X}")
-    _write(join(gadget_path, "bcdUSB"), f"0x{config.otg.usb_version:04X}")
+    _write(join(gadget_path, "idVendor"), f"0x{co.vendor_id:04X}")
+    _write(join(gadget_path, "idProduct"), f"0x{co.product_id:04X}")
+    _write(join(gadget_path, "bcdUSB"), f"0x{co.usb_version:04X}")
 
     # bcdDevice should be incremented any time there are breaking changes
     # to this script so that the host OS sees it as a new device
     # and re-enumerates everything rather than relying on cached values.
-    device_version = config.otg.device_version
+    device_version = co.device_version
     if device_version < 0:
         device_version = 0x0100
-        if config.otg.devices.ethernet.enabled:
-            if config.otg.devices.ethernet.driver == "ncm":
+        if cod.ethernet.enabled:
+            if cod.ethernet.driver == "ncm":
                 device_version = 0x0102
-            elif config.otg.devices.ethernet.driver == "rndis":
+            elif cod.ethernet.driver == "rndis":
                 device_version = 0x0101
     _write(join(gadget_path, "bcdDevice"), f"0x{device_version:04X}")
 
     lang_path = join(gadget_path, "strings/0x409")
     _mkdir(lang_path)
-    _write(join(lang_path, "manufacturer"), config.otg.manufacturer)
-    _write(join(lang_path, "product"), config.otg.product)
-    if config.otg.serial is not None:
-        _write(join(lang_path, "serialnumber"), config.otg.serial)
+    _write(join(lang_path, "manufacturer"), co.manufacturer)
+    _write(join(lang_path, "product"), co.product)
+    if co.serial is not None:
+        _write(join(lang_path, "serialnumber"), co.serial)
 
     profile_path = join(gadget_path, usb.G_PROFILE)
     _mkdir(profile_path)
-    if config.otg.config is not None:
+    if co.config is not None:
         _mkdir(join(profile_path, "strings/0x409"))
-        _write(join(profile_path, "strings/0x409/configuration"), config.otg.config)
-    _write(join(profile_path, "MaxPower"), config.otg.max_power)
-    if config.otg.remote_wakeup:
+        _write(join(profile_path, "strings/0x409/configuration"), co.config)
+    _write(join(profile_path, "MaxPower"), co.max_power)
+    if co.remote_wakeup:
         # XXX: Should we use MaxPower=100 with Remote Wakeup?
         _write(join(profile_path, "bmAttributes"), "0xA0")
 
-    gc = _GadgetConfig(gadget_path, profile_path, config.otg.meta, config.otg.endpoints)
-    cod = config.otg.devices
+    gc = _GadgetConfig(gadget_path, profile_path, co.meta, co.endpoints)
 
     if config.kvmd.hid.type == "otg":
         logger.info("===== HID-Keyboard =====")
-        gc.add_keyboard(["hid", "keyboard"], cod.hid.keyboard.start, config.otg.remote_wakeup)
+        gc.add_keyboard(["hid", "keyboard"], cod.hid.keyboard.start, co.remote_wakeup)
         logger.info("===== HID-Mouse =====")
         ckhm = config.kvmd.hid.mouse
         gc.add_mouse(["hid", "mouse"], cod.hid.mouse.start,
-                     config.otg.remote_wakeup, ckhm.absolute, ckhm.horizontal_wheel)
+                     co.remote_wakeup, ckhm.absolute, ckhm.horizontal_wheel)
         if config.kvmd.hid.mouse_alt.device:
             logger.info("===== HID-Mouse-Alt =====")
             gc.add_mouse(["hid", "mouse_alt"], cod.hid.mouse_alt.start,
-                         config.otg.remote_wakeup, (not ckhm.absolute), ckhm.horizontal_wheel)
+                         co.remote_wakeup, (not ckhm.absolute), ckhm.horizontal_wheel)
 
     def make_inquiry_string(isc: Section) -> str:
         kwargs = isc._unpack()
         if kwargs["vendor"] is None:
-            kwargs["vendor"] = config.otg.manufacturer
+            kwargs["vendor"] = co.manufacturer
         return usb.make_inquiry_string(**kwargs)
 
     if config.kvmd.msd.type == "otg":
@@ -439,7 +472,7 @@ def _cmd_start(config: Section) -> None:  # pylint: disable=too-many-statements,
         gc.add_msd(
             starter=["msd"],
             start=cod.msd.start,
-            user=config.otg.user,
+            user=co.user,
             inquiry_string_cdrom=make_inquiry_string(cod.msd.default.inquiry_string.cdrom),
             inquiry_string_flash=make_inquiry_string(cod.msd.default.inquiry_string.flash),
             **cod.msd.default._unpack(ignore="inquiry_string"),
@@ -463,7 +496,7 @@ def _cmd_start(config: Section) -> None:  # pylint: disable=too-many-statements,
 
     if cod.serial.enabled:
         logger.info("===== Serial =====")
-        gc.add_serial(["serial"], cod.serial.start)
+        gc.add_serial(["serial"], cod.serial.start, cod.serial.driver)
 
     if cod.audio.enabled and (cod.audio.speakers.enabled or cod.audio.mic.enabled):
         logger.info("===== Audio =====")
@@ -471,15 +504,21 @@ def _cmd_start(config: Section) -> None:  # pylint: disable=too-many-statements,
 
     if cod.camera.enabled:
         logger.info("===== Camera =====")
-        gc.add_camera(["camera"], cod.camera.start, cod.camera.safe, cod.camera.controls.ct_mask, cod.camera.controls.pu_mask)
+        gc.add_camera(
+            ["camera"], cod.camera.start,
+            ("640x480" if cod.camera.safe else cod.camera.resolution.max),
+            ("640x480" if cod.camera.safe else cod.camera.resolution.default),
+            cod.camera.streaming.max_packet, cod.camera.streaming.interval,
+            cod.camera.controls.ct_mask, cod.camera.controls.pu_mask,
+        )
 
     logger.info("===== Preparing complete =====")
 
     logger.info("Enabling the gadget ...")
     _write(join(gadget_path, "UDC"), udc)
-    time.sleep(config.otg.init_delay)
-    _chown(join(gadget_path, "UDC"), config.otg.user)
-    _chown(profile_path, config.otg.user)
+    time.sleep(co.init_delay)
+    _chown(join(gadget_path, "UDC"), co.user)
+    _chown(profile_path, co.user)
 
     logger.info("Ready to work")
 

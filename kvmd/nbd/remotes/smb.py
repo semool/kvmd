@@ -35,19 +35,21 @@ from ...validators.basic import valid_number
 from ...validators.net import valid_url
 
 from ..types import NbdImage
+from ..url import NbdUrl
 
-from . import NbdUrl
-from . import BaseNbdRemote
+from . import BaseNbdUserRemote
 
 
 # =====
 @dataclasses.dataclass(frozen=True)
 class _FileHandle:
-    file: smbc.File
-    rw:   bool
+    file:     smbc.File
+    writable: bool
 
 
-class NbdSmbRemote(BaseNbdRemote):
+class NbdSmbRemote(BaseNbdUserRemote):
+    __PROTO: Final[str] = "smb"
+
     def __init__(self, c: Section) -> None:
         super().__init__(c)
 
@@ -62,7 +64,7 @@ class NbdSmbRemote(BaseNbdRemote):
 
     @classmethod
     def get_schemes(cls) -> set[str]:
-        return set(["smb"])
+        return set([cls.__PROTO])
 
     @classmethod
     def get_options(cls) -> dict[str, Option]:
@@ -71,7 +73,7 @@ class NbdSmbRemote(BaseNbdRemote):
             "user":    Option(""),
             "passwd":  Option(""),
             "timeout": Option(3.0, type=valid_number.mk(min=1.0, max=30.0, type=float)),
-            **BaseNbdRemote.get_options(),
+            **BaseNbdUserRemote.get_options(),
         }
 
     # =====
@@ -107,21 +109,21 @@ class NbdSmbRemote(BaseNbdRemote):
             ctx.functionAuthData = cb  # noqa vulture-ignore
         try:
             file = await asyncio.to_thread(ctx.open, self.__url.raw, os.O_RDWR)
-            rw = True
+            writable = True
         except smbc.PermissionError:  # pylint: disable=no-member
             file = await asyncio.to_thread(ctx.open, self.__url.raw, os.O_RDONLY)
-            rw = False
-        return _FileHandle(file, rw)
+            writable = False
+        return _FileHandle(file, writable)
 
     async def __probe(self, fh: _FileHandle) -> NbdImage:
         st = await asyncio.to_thread(fh.file.fstat)
         return NbdImage(
             url=self.__url.raw,
-            proto="SMB",
+            proto=self.__PROTO,
             name=self.__url.name,
             size=st[6],
             mod_ts=float(st[8]),
-            rw=fh.rw,
+            writable=fh.writable,
         )
 
     async def _on_read(self, offset: int, size: int) -> bytes:

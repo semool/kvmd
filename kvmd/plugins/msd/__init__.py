@@ -21,10 +21,13 @@
 
 
 import os
+import re
 import asyncio
 import contextlib
 import time
 
+import typing
+from typing import Final
 from typing import Self
 from typing import AsyncGenerator
 from typing import Any
@@ -40,7 +43,9 @@ from ...errors import IsBusyError
 
 from ...yamlconf import Section
 
-from ...clients.nbd import NbdClient
+if typing.TYPE_CHECKING:
+    # This import is too heavy because of aiohttp
+    from ...clients.nbd import NbdClient
 
 from ... import aiotools
 
@@ -97,11 +102,6 @@ class MsdImageStaticError(MsdOperationError):
         super().__init__("This image can't be removed")
 
 
-class MsdRemoteDisabledError(MsdOperationError):
-    def __init__(self) -> None:
-        super().__init__("Remote images binding is disabled")
-
-
 # =====
 class BaseMsdReader:
     def get_state(self) -> dict:
@@ -134,6 +134,9 @@ class BaseMsd(BasePlugin):
     def __init__(self, c: Section, nbd: NbdClient) -> None:
         super().__init__(c)
         _ = nbd
+
+    def is_remote_url(self, url: str) -> bool:
+        return bool(re.match(r"^[a-zA-Z][a-zA-Z0-9._+-]+[a-zA-Z0-9]://[a-zA-Z0-9\[]", url))
 
     async def get_state(self) -> dict:
         raise NotImplementedError()
@@ -169,6 +172,7 @@ class BaseMsd(BasePlugin):
     async def set_params(
         self,
         name: (str | None)=None,
+        guess: (bool | None)=None,
         cdrom: (bool | None)=None,
         rw: (bool | None)=None,
         remote_url: (str | None)=None,
@@ -192,11 +196,13 @@ class BaseMsd(BasePlugin):
         self,
         name: str,
         size: int,
+        activate: bool,
         remove_incomplete: bool,
     ) -> AsyncGenerator[BaseMsdWriter]:
 
         _ = name
         _ = size
+        _ = activate
         _ = remove_incomplete
 
         if self is not None:  # XXX: Vulture and pylint hack
@@ -208,18 +214,18 @@ class BaseMsd(BasePlugin):
 
 
 class MsdFileReader(BaseMsdReader):  # pylint: disable=too-many-instance-attributes
+    __CHUNK_SIZE: Final[int] = 65536
+
     def __init__(
         self,
         nr: aiotools.AioNotifier,
         name: str,
         path: str,
-        chunk_size: int,
     ) -> None:
 
         self.__nr = nr
         self.__name = name
         self.__path = path
-        self.__chunk_size = chunk_size
 
         self.__file: (aiofiles.base.AiofilesContextManager | None) = None
         self.__file_size = 0
@@ -238,12 +244,12 @@ class MsdFileReader(BaseMsdReader):  # pylint: disable=too-many-instance-attribu
         return self.__file_size
 
     def get_chunk_size(self) -> int:
-        return self.__chunk_size
+        return self.__CHUNK_SIZE
 
     async def read_chunked(self) -> AsyncGenerator[bytes]:
         assert self.__file is not None
         while True:
-            chunk = await self.__file.read(self.__chunk_size)  # type: ignore
+            chunk = await self.__file.read(self.__CHUNK_SIZE)  # type: ignore
             if not chunk:
                 break
 
@@ -274,22 +280,21 @@ class MsdFileReader(BaseMsdReader):  # pylint: disable=too-many-instance-attribu
 
 
 class MsdFileWriter(BaseMsdWriter):  # pylint: disable=too-many-instance-attributes
+    __CHUNK_SIZE: Final[int] = 65536
+    __SYNC_SIZE:  Final[int] = 4194304
+
     def __init__(
         self,
         nr: aiotools.AioNotifier,
         name: str,
         path: str,
         file_size: int,
-        sync_size: int,
-        chunk_size: int,
     ) -> None:
 
         self.__nr = nr
         self.__name = name
         self.__path = path
         self.__file_size = file_size
-        self.__sync_size = sync_size
-        self.__chunk_size = chunk_size
 
         self.__file: (aiofiles.base.AiofilesContextManager | None) = None
         self.__written = 0
@@ -304,7 +309,7 @@ class MsdFileWriter(BaseMsdWriter):  # pylint: disable=too-many-instance-attribu
         }
 
     def get_chunk_size(self) -> int:
-        return self.__chunk_size
+        return self.__CHUNK_SIZE
 
     async def write_chunk(self, chunk: bytes) -> int:
         assert self.__file is not None
@@ -313,7 +318,7 @@ class MsdFileWriter(BaseMsdWriter):  # pylint: disable=too-many-instance-attribu
         self.__written += len(chunk)
 
         self.__unsynced += len(chunk)
-        if self.__unsynced >= self.__sync_size:
+        if self.__unsynced >= self.__SYNC_SIZE:
             await self.__sync()
             self.__unsynced = 0
 

@@ -20,11 +20,8 @@
 # ========================================================================== #
 
 
-import os
 import asyncio
 import contextlib
-import dataclasses
-import urllib.parse
 import struct
 import errno
 
@@ -48,43 +45,71 @@ from ..types import NbdImage
 from ..types import BaseNbdEvent
 from ..types import NbdRunningEvent
 
-from ..link import NbdLink
-
-
-# =====
-@dataclasses.dataclass(frozen=True)
-class NbdUrl:
-    raw:  str
-    port: int = dataclasses.field(compare=False)
-    host: str = dataclasses.field(init=False, compare=False)
-    name: str = dataclasses.field(init=False, compare=False)
-    path: str = dataclasses.field(init=False, compare=False)
-
-    def __post_init__(self) -> None:
-        parsed = urllib.parse.urlparse(self.raw)
-
-        if not parsed.hostname:
-            raise NbdRemoteError("Empty hostname in URL")
-        object.__setattr__(self, "host", parsed.hostname)
-
-        try:
-            port = (parsed.port or self.port)
-        except Exception:
-            raise NbdRemoteError("Invalid port in URL")
-        object.__setattr__(self, "port", port)
-
-        name = os.path.basename(parsed.path)
-        if not name:
-            raise NbdRemoteError("Empty filename in URL")
-        object.__setattr__(self, "name", name)
-
-        if not parsed.path:
-            raise NbdRemoteError("Empty file path in URL")
-        object.__setattr__(self, "path", parsed.path)
+from ..link import BaseNbdLink
+from ..link import NbdUserLink
 
 
 # =====
 class BaseNbdRemote:
+    def __init__(self, c: Section) -> None:
+        _ = c
+
+    # =====
+
+    @classmethod
+    def get_schemes(cls) -> set[str]:
+        raise NotImplementedError
+
+    @classmethod
+    def get_options(cls) -> dict[str, Option]:
+        raise NotImplementedError
+
+    # =====
+
+    def get_timeout(self) -> float:
+        raise NotImplementedError
+
+    # =====
+
+    async def explore(self) -> NbdImage:
+        raise NotImplementedError
+
+    async def probe(self) -> NbdImage:  # noqa vulture-ignore
+        raise NotImplementedError
+
+    def make_link(self) -> BaseNbdLink:
+        raise NotImplementedError
+
+    async def serve(
+        self,
+        link: BaseNbdLink,
+        events_q: aiomulti.AioMpQueue[BaseNbdEvent],
+    ) -> None:
+
+        raise NotImplementedError
+
+    async def cleanup(self) -> None:
+        raise NotImplementedError
+
+    # =====
+
+    def _send_running(
+        self,
+        events_q: aiomulti.AioMpQueue[BaseNbdEvent],
+        online: bool=True,
+        msg: str="",
+    ) -> None:
+
+        if online and not msg:
+            msg = "Online"
+
+        try:
+            events_q.put_nowait(NbdRunningEvent(online, msg))
+        except Exception as ex:
+            raise NbdRemoteError(f"Can't send event: {tools.efmt(ex)}")
+
+
+class BaseNbdUserRemote(BaseNbdRemote):
     # https://github.com/NetworkBlockDevice/nbd/blob/master/doc/proto.md
     # https://github.com/NetworkBlockDevice/nbd/blob/master/nbd-client.c
     # https://github.com/mirror/busybox/blob/master/networking/nbd-client.c
@@ -98,13 +123,15 @@ class BaseNbdRemote:
     __OP_STOP:  Final[int] = 2
 
     def __init__(self, c: Section) -> None:
+        super().__init__(c)
+
         self.__retries_delay: Final[float] = c.retries_delay
 
         self.__recv_st = struct.Struct(">IHHQQI")
         self.__send_st = struct.Struct(">IIQ")
 
         self.__image: (NbdImage | None) = None
-        self.__opened: (bool | None) = None
+        self.__opened = False
         self.__events_q: (aiomulti.AioMpQueue[BaseNbdEvent] | None) = None
 
     # =====
@@ -149,9 +176,12 @@ class BaseNbdRemote:
         self.__image = await self._do_probe()
         return self.__image
 
+    def make_link(self) -> NbdUserLink:
+        return NbdUserLink()
+
     async def serve(
         self,
-        link: NbdLink,
+        link: NbdUserLink,  # type: ignore
         events_q: aiomulti.AioMpQueue[BaseNbdEvent],
     ) -> None:
 
@@ -159,7 +189,7 @@ class BaseNbdRemote:
         assert self.__events_q is None
         self.__events_q = events_q
 
-        async with self.__ensured_for_io("VALIDATE", False):
+        async with self.__ensured_for_io("VALIDATE", True):
             pass  # Validate NbdImage after first probing
 
         while True:
@@ -255,7 +285,7 @@ class BaseNbdRemote:
         assert offset >= 0
         assert self.__image
 
-        if not self.__image.rw:
+        if not self.__image.writable:
             return errno.EPERM
         if offset >= self.__image.size:
             return errno.ENOSPC
@@ -275,10 +305,11 @@ class BaseNbdRemote:
     @contextlib.asynccontextmanager
     async def __ensured_for_io(self, action: str, send_event: bool) -> AsyncGenerator[None]:
         assert self.__image
+        assert self.__events_q
         try:
             if not self.__opened:
                 image = await self._do_ensure()
-                if self.__image.rw is True and not image.rw:
+                if self.__image.writable is True and not image.writable:
                     raise NbdRemoteError("The source permissions changed: RW -> RO")
                 if self.__image.size != image.size:
                     raise NbdRemoteError(f"The source file has a new size: {self.__image.size} -> {image.size}")
@@ -291,16 +322,9 @@ class BaseNbdRemote:
                 pass
             if send_event and not isinstance(ex, NbdError):
                 msg = f"{action}: {tools.efmt(ex)}; Retrying ..."
-                await self.__send_event(NbdRunningEvent(False, msg))
+                self._send_running(self.__events_q, False, msg)
             raise
         else:
-            if send_event and self.__opened is False:  # Ignore for None
-                await self.__send_event(NbdRunningEvent(True, "Online"))
+            if send_event and not self.__opened:
+                self._send_running(self.__events_q)
             self.__opened = True
-
-    async def __send_event(self, event: BaseNbdEvent) -> None:
-        assert self.__events_q is not None
-        try:
-            self.__events_q.put_nowait(event)
-        except Exception as ex:
-            raise NbdRemoteError(f"Can't send event: {tools.efmt(ex)}")

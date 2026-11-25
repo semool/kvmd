@@ -36,11 +36,13 @@ from ...validators.net import valid_url
 from ..errors import NbdRemoteError
 from ..types import NbdImage
 
-from . import BaseNbdRemote
+from . import BaseNbdUserRemote
 
 
 # =====
-class NbdHttpRemote(BaseNbdRemote):
+class NbdHttpRemote(BaseNbdUserRemote):
+    __PROTOS: Final[frozenset[str]] = frozenset(["http", "https"])
+
     def __init__(self, c: Section) -> None:
         super().__init__(c)
 
@@ -56,7 +58,7 @@ class NbdHttpRemote(BaseNbdRemote):
 
     @classmethod
     def get_schemes(cls) -> set[str]:
-        return set(["http", "https"])
+        return set(cls.__PROTOS)
 
     @classmethod
     def get_options(cls) -> dict[str, Option]:
@@ -66,7 +68,7 @@ class NbdHttpRemote(BaseNbdRemote):
             "user":    Option(""),
             "passwd":  Option(""),
             "timeout": Option(3.0, type=valid_number.mk(min=1.0, max=30.0, type=float)),
-            **BaseNbdRemote.get_options(),
+            **BaseNbdUserRemote.get_options(),
         }
 
     # =====
@@ -102,10 +104,15 @@ class NbdHttpRemote(BaseNbdRemote):
         )
 
     async def __probe(self, session: aiohttp.ClientSession) -> NbdImage:
-        async with session.head(self.__url) as resp:
+        async with session.head(
+            url=self.__url,
+            allow_redirects=True,
+        ) as resp:
+
             htclient.raise_not_200(resp)
 
-            proto = resp.request_info.url.scheme.upper()
+            proto = resp.request_info.url.scheme.lower()
+            assert proto in self.__PROTOS
             name = htclient.get_filename(resp)
 
             cl = resp.content_length
@@ -123,7 +130,7 @@ class NbdHttpRemote(BaseNbdRemote):
                 name=name,
                 size=cl,
                 mod_ts=mod_ts,
-                rw=False,
+                writable=False,
             )
 
     async def _on_read(self, offset: int, size: int) -> bytes:
@@ -133,6 +140,7 @@ class NbdHttpRemote(BaseNbdRemote):
 
         async with self.__session.get(
             url=self.__url,
+            allow_redirects=True,
             # HTTP Range включает края: bytes=0-499 запрашивает 500 байт.
             #  - https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Range
             headers={aiohttp.hdrs.RANGE: f"bytes={offset}-{offset + size - 1}"},

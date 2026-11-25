@@ -41,12 +41,11 @@ from .errors import NbdIoConnectionError
 
 from .types import NbdImage
 from .types import BaseNbdEvent
-from .types import NbdRunningEvent
 from .types import NbdStoppedEvent
 
 from .device import NbdDevice
 from .remotes import BaseNbdRemote
-from .link import NbdLink
+from .link import BaseNbdLink
 
 
 # =====
@@ -69,6 +68,9 @@ class NbdProcess:
         self.__events_q: aiomulti.AioMpQueue[BaseNbdEvent] = aiomulti.AioMpQueue(self.__QUEUE_SIZE)
         self.__proc = aiomulti.AioMpProcess("nbd", self.__subprocess)
         self.__ready_nr = aiomulti.AioMpNotifier()
+
+    def get_timeout(self) -> float:
+        return (self.__remote.get_timeout() + self.__REACT_TIMEOUT)
 
     def get_binding(self) -> tuple[str, NbdImage]:
         return (self.__binding_id, self.__image)
@@ -125,7 +127,7 @@ class NbdProcess:
             aiotools.run(self.__subprocess_loop())
 
     async def __subprocess_loop(self) -> None:
-        async with NbdLink.opened() as link:
+        async with self.__remote.make_link().opened() as link:
             tasks: list[asyncio.Task] = []
 
             def stop() -> None:
@@ -150,14 +152,14 @@ class NbdProcess:
                 tasks=tasks,
             )
 
-    async def __sub_device_server(self, link: NbdLink, prepared: aiotools.AioStage) -> None:
+    async def __sub_device_server(self, link: BaseNbdLink, prepared: aiotools.AioStage) -> None:
         with self.__catch_exceptions("device", log=self.__device.__module__):
             with link.shutdown_at_end():
                 async with self.__device.open_prepared(link, self.__image) as fd:
                     prepared.set_passed()
                     await self.__device.do_it(fd)
 
-    async def __sub_remote_server(self, link: NbdLink) -> None:
+    async def __sub_remote_server(self, link: BaseNbdLink) -> None:
         try:
             with self.__catch_exceptions("remote", log=self.__remote.__module__):
                 with link.shutdown_at_end():
@@ -169,7 +171,7 @@ class NbdProcess:
         finally:
             await self.__remote.cleanup()
 
-    async def __sub_checker(self, link: NbdLink, prepared: aiotools.AioStage) -> None:
+    async def __sub_checker(self, link: BaseNbdLink, prepared: aiotools.AioStage) -> None:
         logger = get_logger(0)
         with self.__catch_exceptions("checker"):
             with link.shutdown_at_end():
@@ -185,7 +187,6 @@ class NbdProcess:
                     if isinstance(ex, TimeoutError):
                         raise NbdError("Can't open+close device in time")
                     raise
-                self.__events_q.put_nowait(NbdRunningEvent(True, "Online"))
                 self.__ready_nr.notify(1)
                 await aiotools.wait_infinite()
 

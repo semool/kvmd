@@ -74,6 +74,7 @@ class Plugin(BaseMsd):
     async def set_params(
         self,
         name: (str | None)=None,
+        guess: (bool | None)=None,
         cdrom: (bool | None)=None,
         rw: (bool | None)=None,
         remote_url: (str | None)=None,
@@ -96,6 +97,7 @@ class Plugin(BaseMsd):
         self,
         name: str,
         size: int,
+        activate: bool,
         remove_incomplete: bool,
     ) -> AsyncGenerator[BaseMsdWriter]:
 

@@ -20,12 +20,12 @@
 # ========================================================================== #
 
 
-import re
 import asyncio
 import lzma
 import time
 
 from typing import AsyncGenerator
+from typing import Any
 
 import aiohttp
 import zstandard
@@ -69,12 +69,15 @@ class MsdApi:
 
     @exposed_http("POST", "/msd/set_params")
     async def __set_params_handler(self, req: Request) -> Response:
-        query = dict(req.query)
+        query: dict[str, Any] = {}
+        query.update(dict(req.query))
+        query.update(dict(await req.post()))
 
         params = {
             key: validator(query.pop(param))  # type: ignore
             for (param, key, validator) in [
                 ("image", "__image__", valid_stripped_string.mk(name="MSD image name or URL")),
+                ("guess", "guess",     valid_bool),
                 ("cdrom", "cdrom",     valid_bool),
                 ("rw",    "rw",        valid_bool),
             ]
@@ -83,12 +86,12 @@ class MsdApi:
 
         if "__image__" in params:
             image = params.pop("__image__")
-            if re.match(r"^[a-zA-Z][a-zA-Z0-9._+-]+[a-zA-Z]://[a-zA-Z0-9\[]", image) is None:
-                params["name"] = valid_msd_image_name(image, allow_eject=True)
-            else:
+            if self.__msd.is_remote_url(image):
                 # XXX: We don't validate a URL, it should be passed as-is to the lower level.
                 # remote_params are not validated too.
                 params["remote_url"] = image
+            else:
+                params["name"] = valid_msd_image_name(image, allow_eject=True)
 
         await self.__msd.set_params(remote_params=query, **params)  # type: ignore
         return make_json_response()
@@ -154,10 +157,11 @@ class MsdApi:
         name = valid_msd_image_name(unsafe_prefix + req.query.get("image", ""))
 
         size = valid_int_f0(req.content_length)
+        activate = valid_bool(req.query.get("activate", False))
         remove_incomplete = valid_bool(req.query.get("remove_incomplete", False))
 
         written = 0
-        async with self.__msd.write_image(name, size, remove_incomplete) as writer:
+        async with self.__msd.write_image(name, size, activate, remove_incomplete) as writer:
             chunk_size = writer.get_chunk_size()
             while True:
                 chunk = await req.content.read(chunk_size)
@@ -169,8 +173,13 @@ class MsdApi:
     @exposed_http("POST", "/msd/write_remote")
     async def __write_remote_handler(self, req: Request) -> (Response | StreamResponse):  # pylint: disable=too-many-locals
         url = valid_url(req.query.get("url"))
+
         insecure = valid_bool(req.query.get("insecure", False))
+        verify = valid_bool(req.query.get("verify", (not insecure)))
+
         timeout = valid_float_f01(req.query.get("timeout", 10.0))
+
+        activate = valid_bool(req.query.get("activate", False))
         remove_incomplete = valid_bool(req.query.get("remove_incomplete", False))
 
         resp: (StreamResponse | None) = None
@@ -184,7 +193,7 @@ class MsdApi:
         try:
             async with downloader.download(
                 url=url,
-                verify=(not insecure),
+                verify=verify,
                 timeout=timeout,
                 read_timeout=(7 * 24 * 3600),
             ) as file:
@@ -194,7 +203,7 @@ class MsdApi:
 
                 get_logger(0).info("Downloading image %r as %r to MSD ...", url, name)
 
-                async with self.__msd.write_image(name, file.size, remove_incomplete) as writer:
+                async with self.__msd.write_image(name, file.size, activate, remove_incomplete) as writer:
                     size = file.size
                     resp = await start_streaming(req, "application/x-ndjson")
                     await stream_write_info()

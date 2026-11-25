@@ -37,18 +37,18 @@ from ...validators.net import valid_url
 
 from ..errors import NbdRemoteError
 from ..types import NbdImage
+from ..url import NbdUrl
 
-from . import NbdUrl
-from . import BaseNbdRemote
+from . import BaseNbdUserRemote
 
 
 # =====
 @dataclasses.dataclass(frozen=True)
 class _FileHandle:
-    ssh:  paramiko.SSHClient
-    sftp: paramiko.SFTPClient
-    file: paramiko.SFTPFile
-    rw:   bool
+    ssh:      paramiko.SSHClient
+    sftp:     paramiko.SFTPClient
+    file:     paramiko.SFTPFile
+    writable: bool
 
 
 def _close(
@@ -68,7 +68,9 @@ def _close(
             ssh.close()
 
 
-class NbdSftpRemote(BaseNbdRemote):
+class NbdSftpRemote(BaseNbdUserRemote):
+    __PROTO: Final[str] = "sftp"
+
     def __init__(self, c: Section) -> None:
         super().__init__(c)
 
@@ -83,7 +85,7 @@ class NbdSftpRemote(BaseNbdRemote):
 
     @classmethod
     def get_schemes(cls) -> set[str]:
-        return set(["sftp"])
+        return set([cls.__PROTO])
 
     @classmethod
     def get_options(cls) -> dict[str, Option]:
@@ -92,7 +94,7 @@ class NbdSftpRemote(BaseNbdRemote):
             "user":    Option("",   type=valid_stripped_string_not_empty),
             "passwd":  Option(None, type=str, if_none=None),
             "timeout": Option(5.0,  type=valid_number.mk(min=1.0, max=30.0, type=float)),
-            **BaseNbdRemote.get_options(),
+            **BaseNbdUserRemote.get_options(),
         }
 
     # =====
@@ -142,15 +144,15 @@ class NbdSftpRemote(BaseNbdRemote):
             sftp = await asyncio.to_thread(ssh.open_sftp)
             try:
                 file = await asyncio.to_thread(sftp.file, self.__url.path, "r+")
-                rw = True
+                writable = True
             except OSError:  # Without a correct errno, sigh
                 file = await asyncio.to_thread(sftp.file, self.__url.path, "r")
-                rw = False
+                writable = False
         except Exception:
             await asyncio.to_thread(_close, ssh, sftp, file)
             raise
 
-        return _FileHandle(ssh, sftp, file, rw)
+        return _FileHandle(ssh, sftp, file, writable)
 
     async def __probe(self, fh: _FileHandle) -> NbdImage:
         st = await asyncio.to_thread(fh.file.stat)
@@ -158,11 +160,11 @@ class NbdSftpRemote(BaseNbdRemote):
             raise NbdRemoteError("Can't fetch file size")
         return NbdImage(
             url=self.__url.raw,
-            proto="SFTP",
+            proto=self.__PROTO,
             name=self.__url.name,
             size=st.st_size,
             mod_ts=float(st.st_mtime or 0),
-            rw=fh.rw,
+            writable=fh.writable,
         )
 
     async def _on_read(self, offset: int, size: int) -> bytes:

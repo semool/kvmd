@@ -45,6 +45,11 @@ class MsdLockedError(MsdOperationError):
 
 
 # =====
+def is_cdromable(size: int) -> bool:
+    return (size < 33_957_083_136)
+
+
+# =====
 class Drive:
     def __init__(self, instance: int, lun: int) -> None:
         func = f"mass_storage.usb{instance}"
@@ -66,6 +71,10 @@ class Drive:
         return [self.__lun_path, self.__profile_path]
 
     # =====
+
+    def trigger_image_inotify(self) -> None:
+        with open(os.path.join(self.__lun_path, "file"), "r+"):
+            pass
 
     def set_image_path(self, path: str) -> None:
         if path:
